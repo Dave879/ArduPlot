@@ -45,8 +45,10 @@ struct ScrollingBuffer
 class MyApp : public Application
 {
 public:
-    MyApp() : Application(1400, 1000, "ArduPlotter")
+    MyApp() : Application(1400, 1000, "ArduPlot")
     {
+        ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     }
     void update() override
     {
