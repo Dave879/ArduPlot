@@ -7,7 +7,7 @@ cd ..;
 if [ -d "build/" ]
 then
 	cd build/
-	gdb ./ArduPlotter
+	gdb ./ArduPlot
 else
     echo "Error: Directory build does not exist."
 fi
