@@ -2,6 +2,7 @@
 #include <Mahi/Util.hpp>
 #include <vector>
 #include <string>
+#include <thread>
 #include <enumserial.h>
 #include <serialport.h>
 #include <json.hpp>
@@ -25,23 +26,74 @@ void ArduPlot::update()
 	DrawPortAndBaudrateChooser();
 
 	DrawPlots(JsonData);
+}
 
-	int length = serial.Read(data);
-	if (length != -1)
+void ConnectAndReadFromSerial(json &dataRow, bool &joinReadThread, bool &connected, std::string current_item, std::string current_baudrate)
+{
+	SerialPort serial;
+	unsigned char data[1000] = {0};
+	std::string strData;
+	int length;
+
+#ifdef _WIN_
+	serial.Open(paths[choice_path]); // TODO: needs to be fixed
+#elif __APPLE__
+	std::string s = "/dev/" + current_item;
+	try
 	{
-		strData = std::string(&data[0], &data[0] + length);
-		std::cout << strData << std::endl;
-		JsonData = json::parse(strData);
+		bool res = serial.Open(s.c_str());
+		if (res)
+		{
+			std::cout << "Successfully connected to " << s << std::endl;
+			connected = true;
+		}
+		else
+			std::cout << "There was an error connecting to " << s << std::endl;
+	}
+	catch (const std::exception &e)
+	{
+		std::cerr << e.what() << '\n';
+	}
+
+#endif
+	serial.SetBaudRate(std::stoi(current_baudrate));
+	serial.SetParity(8, 1, 'N');
+
+	while (!joinReadThread)
+	{
+		length = serial.Read(data);
+		if (length != -1)
+		{
+			strData = std::string(&data[0], &data[0] + length);
+			// std::cout << strData << std::endl;
+			try
+			{
+				dataRow = json::parse(strData);
+			}
+			catch (const std::exception &e)
+			{
+				std::cout << "B|" << strData << "|E" << std::endl;
+				//dataRow.clear();
+				// std::cerr << e.what() << '\n';
+			}
+		}
 	}
 }
 
-void ArduPlot::DrawPlots(json j)
+void ArduPlot::DrawPlots(json &j)
 {
+
+	// even easier with structured bindings (C++17)
+	for (auto &[key, value] : j.items())
+	{
+		std::cout << key << " : " << value << "\n";
+	}
+	/*
 	ImGui::Begin("Plot A0");
 	static ScrollingBuffer sdata1;
 	static float t = 0;
 	t += ImGui::GetIO().DeltaTime;
-	sdata1.AddPoint(t, -1 /*TODO*/);
+	sdata1.AddPoint(t, -1); // TODO
 
 	static float history = 10.0f;
 	ImGui::SliderFloat("History", &history, 1, 30, "%.1f s");
@@ -57,14 +109,20 @@ void ArduPlot::DrawPlots(json j)
 	}
 
 	ImGui::End();
+	*/
+}
+
+std::vector<std::string> ArduPlot::ScanForAvailableBoards()
+{
+	EnumSerial enumserial;
+	return enumserial.EnumSerialPort(); // Enum device driver of serial port
 }
 
 void ArduPlot::DrawPortAndBaudrateChooser()
 {
-
 	ImGui::Begin("Port - Baudrate chooser");
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
-	if (ImGui::BeginCombo("##usbcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.
+	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.
 	{
 		paths = ScanForAvailableBoards();
 		for (int n = 0; n < paths.size(); n++)
@@ -91,32 +149,51 @@ void ArduPlot::DrawPortAndBaudrateChooser()
 		}
 		ImGui::EndCombo();
 	}
-	if (ImGui::Button("Connect", ImGui::GetContentRegionAvail()))
+	if (!connected)
 	{
-
-#ifdef _WIN_
-		serial.Open(paths[choice_path]);
-#elif __APPLE__
-		std::string s = "/dev/" + current_item;
-		try
+		if (ImGui::Button("Connect", ImGui::GetContentRegionAvail()))
 		{
-			bool res = serial.Open(s.c_str());
-			if (res)
-				std::cout << "Successfully connected to " << s << std::endl;
-			else
-				std::cout << "There was an error connecting to " << s << std::endl;
+			SerialReadThread = std::thread(ConnectAndReadFromSerial, std::ref(JsonData), std::ref(joinReadThread), std::ref(connected), current_item, current_baudrate);
 		}
-		catch (const std::exception &e)
+	}
+	else
+	{
+		if (ImGui::Button("Disconnect", ImGui::GetContentRegionAvail()))
 		{
-			std::cerr << e.what() << '\n';
+			joinReadThread = true;
+			while (!SerialReadThread.joinable())
+			{
+				std::cout << "Waiting for thread to be joinable..." << std::endl;
+			}
+			SerialReadThread.join();
+			joinReadThread = false;
+			connected = false;
 		}
-
-#endif
-		serial.SetBaudRate(std::stoi(current_baudrate));
-		serial.SetParity(8, 1, 'N');
 	}
 	// unsigned char str[17] = "Hello Terminal \n";
 	// serial.Write(str, 17);
 
 	ImGui::End();
+}
+
+template <typename T>
+void ArduPlot::NewPlot(std::string name, ScrollingBuffer sdata1, T anyData)
+{
+	ImGui::Begin(name.c_str());
+	static float t = 0;
+	t += ImGui::GetIO().DeltaTime;
+	sdata1.AddPoint(t, anyData);
+
+	static float history = 10.0f;
+	ImGui::SliderFloat("History", &history, 1, 30, "%.1f s");
+
+	static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
+	ImPlot::SetNextPlotLimitsX(t - history, t, ImGuiCond_Always);
+	ImPlot::SetNextPlotLimitsY(-10, 1100, ImGuiCond_Always);
+	if (ImPlot::BeginPlot(name.c_str(), NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
+	{
+		ImPlot::PlotLine(name.c_str(), &sdata1.Data[0].x, &sdata1.Data[0].y, sdata1.Data.size(), sdata1.Offset, 2 * sizeof(float));
+		// ImPlot::PlotLine("Mouse y", &sdata2.Data[0].x, &sdata2.Data[0].y, sdata2.Data.size(), sdata2.Offset, 2 * sizeof(float));
+		ImPlot::EndPlot();
+	}
 }

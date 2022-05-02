@@ -1,447 +1,161 @@
-#include "serialport.h"
+// SerialPort.cpp
 
-SerialPort::SerialPort()
+#include "SerialPort.h"
+
+#include <chrono>
+#include <fcntl.h> //open()
+#include <stdio.h>
+#include <termios.h>
+#include <unistd.h> //write(), read(), close()
+#include <errno.h>  //errno
+#include <cstring>
+
+using namespace std::chrono;
+
+// Serial port file descriptor
+static const int SFD_UNAVAILABLE = -1;
+static int sfd = SFD_UNAVAILABLE;
+
+int openAndConfigureSerialPort(const char *portPath, int baudRate)
 {
-}
 
-SerialPort::SerialPort(const char *path, int baud_rate = 9600, int databits = 8, int stopbits = 1, int parity = 'N')
-{
-   this->path = path;
-   this->baud_rate = baud_rate;
-   this->databits = databits;
-   this->stopbits = stopbits;
-   this->parity = parity;
-}
-
-SerialPort::~SerialPort()
-{
-#ifdef _WIN_
-   if (com)
+   // If port is already open, close it
+   if (serialPortIsOpen())
    {
-      CloseHandle(com); // Closing the Serial Port
+      close(sfd);
    }
-#elif __APPLE__
-   Close();
-#endif
-}
 
-#ifdef _WIN_
-bool SerialPort::Open(const std::wstring path)
-#elif __APPLE__
-bool SerialPort::Open(const char *path = "")
-#endif
-{
-#ifdef _WIN_
-   if (com)
+   // Open port, checking for errors
+   sfd = open(portPath, (O_RDWR | O_NOCTTY | O_NDELAY));
+   if (sfd == -1)
    {
-      CloseHandle(com); // Closing the Serial Port
+      printf("Unable to open serial port: %s at baud rate: %d\n", portPath, baudRate);
+      return sfd;
    }
 
-   int path_len = path.length();
-   com_path = std::wstring(L"");
-   memset(&dcb, 0, sizeof(dcb)); // Initializing DCB structure
-
-   if (path_len > 4)
-   { // Not COM1~COM9
-      com_path.append(L"\\\\.\\");
-      com_path.append(path);
-   }
-   else
-   { // COM1~COM9
-      com_path.append(path);
-   }
-
-   std::string com_path_str(com_path.begin(), com_path.end());
-   com = CreateFile(com_path_str.c_str(), GENERIC_READ | GENERIC_WRITE, NULL, NULL, OPEN_EXISTING, 0, NULL);
-
-   if (com == INVALID_HANDLE_VALUE)
-   {
-      return false;
-   }
-#elif __APPLE__
-   if (device)
-   {
-      close(device);
-   }
-
-   device = open(path, O_RDWR);
-
-   if (device == -1)
-   {
-      return false;
-   }
-#endif
-
-   return true;
-}
-
-bool SerialPort::SetBaudRate(int baud_rate = 9600)
-{
-#ifdef _WIN_
-   const int speed_arr[] = {CBR_115200, CBR_57600, CBR_38400, CBR_19200, CBR_9600, CBR_4800, CBR_2400, CBR_1200, CBR_300};
-   const int name_arr[] = {115200, 57600, 38400, 19200, 9600, 4800, 2400, 1200, 300};
-   DCB dcb = {0}; // Initializing DCB structure
-
-   dcb.DCBlength = sizeof(dcb);
-
-   bool status = GetCommState(com, &dcb);
-   if (!status)
-   {
-      return false;
-   }
-
-   for (int i = 0; i < sizeof(speed_arr) / sizeof(int); ++i)
-   {
-      if (baud_rate == name_arr[i])
-      {
-         dcb.BaudRate = speed_arr[i];
-      }
-
-      status = SetCommState(com, &dcb);
-   }
-
-   if (!status)
-   {
-      return false;
-   }
-
-   // Set comm timeout parameter
-   memset(&timeouts, 0, sizeof(timeouts));
-   timeouts.ReadIntervalTimeout = MAXDWORD;   // in milliseconds
-   timeouts.ReadTotalTimeoutConstant = 0;     // 50; // in milliseconds
-   timeouts.ReadTotalTimeoutMultiplier = 0;   // 10; // in milliseconds
-   timeouts.WriteTotalTimeoutConstant = 50;   // in milliseconds
-   timeouts.WriteTotalTimeoutMultiplier = 10; // in milliseconds
-
-   // Set interval timeout for wave detect
-   status = SetCommTimeouts(com, &timeouts);
-   if (!status)
-   {
-      return false;
-   }
-
-   status = PurgeComm(com, PURGE_RXCLEAR); // clear input buffer
-   if (!status)
-   {
-      return false;
-   }
-
-#elif __APPLE__
-   const int speed_arr[] = {B115200, B57600, B38400, B19200, B9600, B4800, B2400, B1200, B300};
-   const int name_arr[] = {115200, 57600, 38400, 19200, 9600, 4800, 2400, 1200, 300};
-
+   // Configure i/o baud rate settings
    struct termios options;
-
-   tcgetattr(device, &options);
-
-   for (int i = 0; i < sizeof(speed_arr) / sizeof(int); ++i)
+   tcgetattr(sfd, &options);
+   switch (baudRate)
    {
-      if (baud_rate == name_arr[i])
-      {
-         tcflush(device, TCIOFLUSH);
-         cfsetispeed(&options, speed_arr[i]);
-         cfsetospeed(&options, speed_arr[i]);
-         tcsetattr(device, TCSANOW, &options);
-      }
-      if (tcflush(device, TCIOFLUSH) != 0)
-      {
-         return false;
-      }
-   }
-#endif
-   return true;
-}
-
-bool SerialPort::SetParity(int databits = 8, int stopbits = 1, int parity = 'N')
-{
-#ifdef _WIN_
-   unsigned char com_parity;
-   unsigned char com_stopbits;
-   DCB dcb = {0}; // Initializing DCB structure
-
-   dcb.DCBlength = sizeof(dcb);
-
-   bool status = GetCommState(com, &dcb);
-   if (!status)
-   {
-      return false;
-   }
-
-   switch (parity)
-   {
-   case 'N':
-   case 'n':
-   {
-      com_parity = NOPARITY;
+   case 9600:
+      cfsetispeed(&options, B9600);
+      cfsetospeed(&options, B9600);
       break;
-   }
-   case 'O':
-   case 'o':
-   {
-      com_parity = ODDPARITY;
+   case 19200:
+      cfsetispeed(&options, B19200);
+      cfsetospeed(&options, B19200);
       break;
-   }
-   case 'E':
-   case 'e':
-   {
-      com_parity = EVENPARITY;
+   case 38400:
+      cfsetispeed(&options, B38400);
+      cfsetospeed(&options, B38400);
       break;
-   }
-   case 'S':
-   case 's':
-   {
-      com_parity = SPACEPARITY;
+   case 57600:
+      cfsetispeed(&options, B57600);
+      cfsetospeed(&options, B57600);
       break;
-   }
    default:
-   {
-      return false;
-   }
-   }
-
-   switch (stopbits)
-   {
-   case 1:
-   {
-      com_stopbits = ONESTOPBIT;
+      printf("Requested baud rate %d not currently supported. Defaulting to 9,600.\n", baudRate);
+      cfsetispeed(&options, B9600);
+      cfsetospeed(&options, B9600);
       break;
    }
-   case 2:
-   {
-      com_stopbits = TWOSTOPBITS;
-      break;
-   }
-   default:
-   {
-      return false;
-   }
-   }
 
-   dcb.ByteSize = databits;
-   dcb.Parity = com_parity;
-   dcb.StopBits = com_stopbits;
-
-   status = SetCommState(com, &dcb);
-   if (!status)
-   {
-      return false;
-   }
-
-   // Set comm timeout parameter
-   memset(&timeouts, 0, sizeof(timeouts));
-   timeouts.ReadIntervalTimeout = MAXDWORD;   // in milliseconds
-   timeouts.ReadTotalTimeoutConstant = 0;     // 50; // in milliseconds
-   timeouts.ReadTotalTimeoutMultiplier = 0;   // 10; // in milliseconds
-   timeouts.WriteTotalTimeoutConstant = 50;   // in milliseconds
-   timeouts.WriteTotalTimeoutMultiplier = 10; // in milliseconds
-
-   // Set interval timeout for wave detect
-   status = SetCommTimeouts(com, &timeouts);
-   if (!status)
-   {
-      return false;
-   }
-   status = PurgeComm(com, PURGE_RXCLEAR); // clear input buffer
-   if (!status)
-   {
-      return false;
-   }
-
-#elif __APPLE__
-   struct termios options;
-
-   if (tcgetattr(device, &options) != 0)
-   {
-      return false;
-   }
-
-   options.c_cflag &= ~CSIZE;
-
-   switch (databits)
-   {
-   case 7:
-   {
-      options.c_cflag |= CS7;
-      break;
-   }
-   case 8:
-   {
-      options.c_cflag |= CS8;
-      break;
-   }
-   default:
-   {
-      return false;
-   }
-   }
-
-   switch (parity)
-   {
-   case 'n':
-   case 'N':
-   {
-      options.c_cflag &= ~PARENB;
-      options.c_iflag &= ~INPCK;
-      break;
-   }
-   case 'o':
-   case 'O':
-   {
-      options.c_cflag |= (PARODD | PARENB);
-      options.c_iflag |= INPCK;
-      break;
-   }
-   case 'e':
-   case 'E':
-   {
-      options.c_cflag |= PARENB;
-      options.c_cflag &= ~PARODD;
-      options.c_iflag |= INPCK;
-      break;
-   }
-   case 's':
-   case 'S':
-   {
-      options.c_cflag &= ~PARENB;
-      options.c_cflag &= ~CSTOPB;
-      break;
-   }
-   default:
-   {
-      return false;
-   }
-   }
-
-   switch (stopbits)
-   {
-   case 1:
-   {
-      options.c_cflag &= ~CSTOPB;
-      break;
-   }
-   case 2:
-   {
-      options.c_cflag |= CSTOPB;
-      break;
-   }
-   default:
-   {
-      return false;
-   }
-   }
-
-   if (parity != 'n' || parity != 'N')
-   {
-      options.c_iflag |= INPCK;
-   }
-
-   options.c_cc[VTIME] = 150;
+   // Configure other settings
+   // Settings from:
+   //   https://github.com/Marzac/rs232/blob/master/rs232-linux.c
+   //
+   options.c_iflag &= ~(INLCR | ICRNL);
+   options.c_iflag |= IGNPAR | IGNBRK;
+   options.c_oflag &= ~(OPOST | ONLCR | OCRNL);
+   options.c_cflag &= ~(PARENB | PARODD | CSTOPB | CSIZE | CRTSCTS);
+   options.c_cflag |= CLOCAL | CREAD | CS8;
+   options.c_lflag &= ~(ICANON | ISIG | ECHO);
+   options.c_cc[VTIME] = 1;
    options.c_cc[VMIN] = 0;
 
-   tcflush(device, TCIFLUSH);
-
-   if (tcsetattr(device, TCSANOW, &options) != 0)
+   // Apply settings
+   // TCSANOW vs TCSAFLUSH? Was using TCSAFLUSH; settings source above
+   // uses TCSANOW.
+   if (tcsetattr(sfd, TCSANOW, &options) < 0)
    {
-      return false;
+      printf("Error setting serial port attributes.\n");
+      close(sfd);
+      return -2; // Using negative value; -1 used above for different failure
    }
-#endif
-   return true;
+
+   return sfd;
 }
 
-void SerialPort::Close()
+bool serialPortIsOpen()
 {
-#ifdef _WIN_
-   if (com)
-   {
-      CloseHandle(com); // Closing the Serial Port
-      com = NULL;
-   }
-#elif __APPLE__
-   if (device)
-   {
-      close(device);
-   }
-#endif
+   return sfd != SFD_UNAVAILABLE;
 }
 
-void SerialPort::Write(unsigned char *data, int length)
+milliseconds getSteadyClockTimestampMs()
 {
-#ifdef _WIN_
-   unsigned long bytes_towrite = length; // No of bytes to write into the port
-   unsigned long bytes_written = 0;      // No of bytes written to the port
-
-   bool status = WriteFile(com, data, bytes_towrite, &bytes_written, NULL);
-
-#elif __APPLE__
-   if (device)
-   {
-      write(device, data, length);
-   }
-#endif
+   return duration_cast<milliseconds>(steady_clock::now().time_since_epoch());
 }
 
-void SerialPort::Read(unsigned char *data, int length)
+ssize_t flushSerialData()
 {
-#ifdef _WIN_
-   unsigned long len_toread = length;
-   unsigned long bytes_read;
-   bool status = ReadFile(com, data, len_toread, &bytes_read, NULL);
-#elif __APPLE__
-   if (device)
-   {
-      read(device, data, length);
-   }
-#endif
-}
 
-int SerialPort::Read(unsigned char *data)
-{
-#ifdef _WIN_
-   unsigned long len_toread = 0;
-   unsigned long bufferlength = 0;
-   unsigned long bytes_read;
-   len_toread = 30000;
+   // For some reason, setting this too high can cause the serial port to not start again properly...
+   float flushDurationMs = 150.0f;
 
-   // Determine the number of new bytes.
-   COMSTAT comstat;
-   unsigned long errormask = 0;
-
-   ClearCommError(com, &errormask, &comstat);
-   bufferlength = comstat.cbInQue;
-   if (!bufferlength)
+   ssize_t result = 0;
+   milliseconds startTimestampMs = getSteadyClockTimestampMs();
+   while (getSteadyClockTimestampMs().count() - startTimestampMs.count() < flushDurationMs)
    {
-      return -1;
-   }
-   if (bufferlength < 30000)
-   {
-      len_toread = bufferlength;
-   }
-
-   bool status = ReadFile(com, data, len_toread, &bytes_read, NULL);
-   if (bytes_read == len_toread)
-   {
-      return bytes_read;
-   }
-#elif __APPLE__
-   if (device == -1)
-   {
-      return -1;
-   }
-   int length;
-   int io_status = ioctl(device, FIONREAD, &length);
-   if (io_status == -1)
-   {
-      Close();
-      return -1;
-   }
-   if (length > 0)
-   {
-      // If the number of bytes read is equal to the number of bytes retrieved
-      if (read(device, data, length) == length)
+      char buffer[1];
+      result = readSerialData(buffer, 1);
+      if (result < 0)
       {
-         return length;
+         printf("readSerialData() failed. Error: %s", strerror(errno));
       }
+   };
+
+   return result;
+}
+
+// Returns -1 on failure, with errno set appropriately
+ssize_t writeSerialData(const char *bytesToWrite, size_t numBytesToWrite)
+{
+
+   ssize_t numBytesWritten = write(sfd, bytesToWrite, numBytesToWrite);
+   if (numBytesWritten < 0)
+   {
+      printf("Serial port write() failed. Error: %s", strerror(errno));
    }
-#endif
-   return -1;
+
+   return numBytesWritten;
+}
+
+// Returns -1 on failure, with errno set appropriately
+ssize_t readSerialData(char *const rxBuffer, size_t numBytesToReceive)
+{
+
+   ssize_t numBytesRead = read(sfd, rxBuffer, numBytesToReceive);
+   if (numBytesRead < 0)
+   {
+      printf("Serial port read() failed. Error:%s", strerror(errno));
+   }
+
+   return numBytesRead;
+}
+
+ssize_t closeSerialPort(void)
+{
+   ssize_t result = 0;
+   if (serialPortIsOpen())
+   {
+      result = close(sfd);
+      sfd = SFD_UNAVAILABLE;
+   }
+   return result;
+}
+
+int getSerialFileDescriptor(void)
+{
+   return sfd;
 }

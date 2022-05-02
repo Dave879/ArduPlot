@@ -1,31 +1,28 @@
 
-#include <enumserial.h>
-
 #include "utils.h"
 
-std::vector<std::string> ScanForAvailableBoards()
+ScrollingBuffer::ScrollingBuffer(int max_size)
 {
-    EnumSerial enumserial;
-    return enumserial.EnumSerialPort(); // Enum device driver of serial port
+    MaxSize = max_size;
+    Offset = 0;
+    Data.reserve(MaxSize);
 }
 
-template <typename T>
-void NewPlot(std::string name, ScrollingBuffer sdata1, T anyData){
-        ImGui::Begin(name.c_str());
-        static float t = 0;
-        t += ImGui::GetIO().DeltaTime;
-        sdata1.AddPoint(t, anyData);
-
-        static float history = 10.0f;
-        ImGui::SliderFloat("History", &history, 1, 30, "%.1f s");
-
-        static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
-        ImPlot::SetNextPlotLimitsX(t - history, t, ImGuiCond_Always);
-        ImPlot::SetNextPlotLimitsY(-10, 1100, ImGuiCond_Always);
-        if (ImPlot::BeginPlot(name.c_str(), NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
-        {
-            ImPlot::PlotLine("A0", &sdata1.Data[0].x, &sdata1.Data[0].y, sdata1.Data.size(), sdata1.Offset, 2 * sizeof(float));
-            // ImPlot::PlotLine("Mouse y", &sdata2.Data[0].x, &sdata2.Data[0].y, sdata2.Data.size(), sdata2.Offset, 2 * sizeof(float));
-            ImPlot::EndPlot();
-        }
+void ScrollingBuffer::AddPoint(float x, float y)
+{
+    if (Data.size() < MaxSize)
+        Data.push_back(ImVec2(x, y));
+    else
+    {
+        Data[Offset] = ImVec2(x, y);
+        Offset = (Offset + 1) % MaxSize;
+    }
+}
+void ScrollingBuffer::Erase()
+{
+    if (Data.size() > 0)
+    {
+        Data.shrink(0);
+        Offset = 0;
+    }
 }

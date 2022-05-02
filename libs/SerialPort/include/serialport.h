@@ -1,60 +1,22 @@
-#ifndef __SERIAL_PORT__
-#define __SERIAL_PORT__
+// SerialPort.hpp
 
-#include <iostream>
-#include <string> 
+#ifndef __SERIAL_PORT_H__
+#define __SERIAL_PORT_H__
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <cerrno>
+#include <unistd.h> //ssize_t
 
-#ifdef _WIN_
+int openAndConfigureSerialPort(const char *portPath, int baudRate);
 
-#include <windows.h>
-#include <tchar.h>
-#elif __APPLE__
+bool serialPortIsOpen();
 
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <termios.h>
+ssize_t flushSerialData();
 
-#endif
+ssize_t writeSerialData(const char *bytes, size_t length);
 
-class SerialPort
-{
-   public:
+ssize_t readSerialData(char *bytes, size_t length);
 
-      SerialPort();
-      SerialPort(const char*,int,int,int,int);
-      ~SerialPort();
-#ifdef _WIN_
-      bool Open(const std::wstring);
-#elif __APPLE__
-      bool Open(const char*);
-#endif
-      bool SetBaudRate(int);
-      bool SetParity(int,int,int);
-      void Close();
-      void Write(unsigned char*,int);
-      void Read(unsigned char*,int);
-      int Read(unsigned char*);
+ssize_t closeSerialPort(void);
 
-   private:
+int getSerialFileDescriptor(void);
 
-      const char *path;
-#ifdef _WIN_
-      HANDLE com;
-      DCB dcb;
-      std::wstring com_path;
-      COMMTIMEOUTS timeouts;
-#elif __APPLE__
-      int device;
-#endif
-      int baud_rate;
-      int databits;
-      int stopbits;
-      int parity;
-};
-
-#endif
+#endif //__SERIAL_PORT_H__
