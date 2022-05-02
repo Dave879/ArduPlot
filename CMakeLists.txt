@@ -22,6 +22,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	./
 	include
 	libs/SerialPort/include
+	libs/json/
 )
 
 target_link_libraries(${PROJECT_NAME} mahi::gui SerialPort)
