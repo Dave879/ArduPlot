@@ -1,6 +1,6 @@
 // SerialPort.cpp
 
-#include "SerialPort.h"
+#include "serialport.h"
 
 #include <chrono>
 #include <fcntl.h> //open()
@@ -36,30 +36,8 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
    // Configure i/o baud rate settings
    struct termios options;
    tcgetattr(sfd, &options);
-   switch (baudRate)
-   {
-   case 9600:
-      cfsetispeed(&options, B9600);
-      cfsetospeed(&options, B9600);
-      break;
-   case 19200:
-      cfsetispeed(&options, B19200);
-      cfsetospeed(&options, B19200);
-      break;
-   case 38400:
-      cfsetispeed(&options, B38400);
-      cfsetospeed(&options, B38400);
-      break;
-   case 57600:
-      cfsetispeed(&options, B57600);
-      cfsetospeed(&options, B57600);
-      break;
-   default:
-      printf("Requested baud rate %d not currently supported. Defaulting to 9,600.\n", baudRate);
-      cfsetispeed(&options, B9600);
-      cfsetospeed(&options, B9600);
-      break;
-   }
+   cfsetispeed(&options, baudRate);
+   cfsetospeed(&options, baudRate);
 
    // Configure other settings
    // Settings from:
