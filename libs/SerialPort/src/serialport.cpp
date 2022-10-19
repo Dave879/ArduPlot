@@ -26,7 +26,8 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
    }
 
    // Open port, checking for errors
-   sfd = open(portPath, (O_RDWR | O_NOCTTY | O_NDELAY));
+
+   sfd = open(portPath, O_RDWR);
    if (sfd == -1)
    {
       printf("Unable to open serial port: %s at baud rate: %d\n", portPath, baudRate);
@@ -35,27 +36,56 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
 
    // Configure i/o baud rate settings
    struct termios options;
-   tcgetattr(sfd, &options);
-   cfsetispeed(&options, baudRate);
-   cfsetospeed(&options, baudRate);
+
+   // Read in existing settings, and handle any error
+   if (tcgetattr(sfd, &options) != 0)
+   {
+      printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+      return 1;
+   }
 
    // Configure other settings
    // Settings from:
    //   https://github.com/Marzac/rs232/blob/master/rs232-linux.c
    //
-   options.c_iflag &= ~(INLCR | ICRNL);
-   options.c_iflag |= IGNPAR | IGNBRK;
-   options.c_oflag &= ~(OPOST | ONLCR | OCRNL);
-   options.c_cflag &= ~(PARENB | PARODD | CSTOPB | CSIZE | CRTSCTS);
-   options.c_cflag |= CLOCAL | CREAD | CS8;
-   options.c_lflag &= ~(ICANON | ISIG | ECHO);
-   options.c_cc[VTIME] = 1;
-   options.c_cc[VMIN] = 0;
+   /*
+      options.c_iflag &= ~(INLCR | ICRNL);
+      options.c_iflag |= IGNPAR | IGNBRK;
+      options.c_oflag &= ~(OPOST | ONLCR | OCRNL);
+      options.c_cflag &= ~(PARENB | PARODD | CSTOPB | CSIZE | CRTSCTS);
+      options.c_cflag |= CLOCAL | CREAD | CS8;
+      options.c_lflag &= ~(ICANON | ISIG | ECHO);
+      options.c_cc[VTIME] = 1;
+      options.c_cc[VMIN] = 0;
+   */
+
+   options.c_cflag &= ~PARENB;        // Clear parity bit, disabling parity (most common)
+   options.c_cflag &= ~CSTOPB;        // Clear stop field, only one stop bit used in communication (most common)
+   options.c_cflag &= ~CSIZE;         // Clear all bits that set the data size
+   options.c_cflag |= CS8;            // 8 bits per byte (most common)
+   options.c_cflag &= ~CRTSCTS;       // Disable RTS/CTS hardware flow control (most common)
+   options.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
+
+   options.c_lflag &= ~ICANON;
+   options.c_lflag &= ~ECHO;                                                        // Disable echo
+   options.c_lflag &= ~ECHOE;                                                       // Disable erasure
+   options.c_lflag &= ~ECHONL;                                                      // Disable new-line echo
+   options.c_lflag &= ~ISIG;                                                        // Disable interpretation of INTR, QUIT and SUSP
+   options.c_iflag &= ~(IXON | IXOFF | IXANY);                                      // Turn off s/w flow ctrl
+   options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL); // Disable any special handling of received bytes
+
+   options.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
+   options.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
+                          // tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
+                          // tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
+
+   cfsetispeed(&options, baudRate);
+   cfsetospeed(&options, baudRate);
 
    // Apply settings
    // TCSANOW vs TCSAFLUSH? Was using TCSAFLUSH; settings source above
    // uses TCSANOW.
-   if (tcsetattr(sfd, TCSANOW, &options) < 0)
+   if (tcsetattr(sfd, TCSANOW, &options) != 0)
    {
       printf("Error setting serial port attributes.\n");
       close(sfd);
@@ -89,7 +119,7 @@ ssize_t flushSerialData()
       result = readSerialData(buffer, 1);
       if (result < 0)
       {
-         printf("readSerialData() failed. Error: %s", strerror(errno));
+         printf("readSerialData() failed. Error: %s\n", strerror(errno));
       }
    };
 
@@ -116,7 +146,7 @@ ssize_t readSerialData(char *const rxBuffer, size_t numBytesToReceive)
    ssize_t numBytesRead = read(sfd, rxBuffer, numBytesToReceive);
    if (numBytesRead < 0)
    {
-      printf("Serial port read() failed. Error:%s", strerror(errno));
+      printf("Serial port read() failed. Error: %s\n", strerror(errno));
    }
 
    return numBytesRead;

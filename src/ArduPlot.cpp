@@ -17,7 +17,7 @@
 using namespace mahi::gui;
 using namespace mahi::util;
 
-ArduPlot::ArduPlot() : Application(500, 300, "ArduPlot")
+ArduPlot::ArduPlot() : Application(1200, 600, "ArduPlot")
 {
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -69,42 +69,47 @@ void ConnectAndReadFromSerial(bool &join_read_thread, bool &connected, Lockable 
 	int length;
 
 	std::string s = "/dev/" + port;
+	int sfd = 0;
 	try
 	{
-		bool res = openAndConfigureSerialPort(s.c_str(), std::stoi(baudrate));
-		if (res)
+		sfd = openAndConfigureSerialPort(s.c_str(), std::stoi(baudrate));
+		if (sfd > 0)
 		{
-			AP_LOG_g("Successfully connected to " << s)
+			AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd)
 				connected = true;
 		}
 		else
+		{
 			AP_LOG_r("There was an error connecting to " << s)
+		}
 	}
 	catch (const std::exception &e)
 	{
 		AP_LOG_r(e.what());
 	}
-	flushSerialData();
+	// flushSerialData();
 
 	uint64_t bit_sum_in_one_second = 0;
 	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 	while (!join_read_thread)
 	{
-		length = serialport_read_until(6, data, '\n', 500, 100);
+		length = serialport_read_until(sfd, data, '\n', 500, 100);
 		if (length >= 0)
 		{
 			Lock lock(lockable);
-			//new_data = true;
-			//USB_data = std::string(data, data + length);
+			// new_data = true;
+			// USB_data = std::string(data, data + length);
 			end = std::chrono::steady_clock::now();
 			if (std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() > 1000) // 1s
 			{
 				float mb_s = bit_sum_in_one_second * 0.000001f;
 				AP_LOG_r(bit_sum_in_one_second << "b/s = " << mb_s << "Mb/s")
-				begin = std::chrono::steady_clock::now();
+					begin = std::chrono::steady_clock::now();
 				bit_sum_in_one_second = 0;
-			} else {
+			}
+			else
+			{
 				bit_sum_in_one_second += length * 8;
 			}
 		}

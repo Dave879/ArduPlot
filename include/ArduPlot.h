@@ -21,7 +21,11 @@ private:
 	std::vector<std::string> paths;
 	const char *baudrate_list[14] = {"110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "38400", "57600", "115200", "128000", "256000"};
 	const char *current_baudrate = "115200";
+#if __APPLE__
 	std::string current_item = "cu.usbmodem110007001";
+#elif __linux__
+	std::string current_item = "ttyACM1";
+#endif
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
 	std::vector<sGraphData> s_graphs;
@@ -49,14 +53,13 @@ private:
 	std::vector<std::string> ScanForAvailableBoards();
 	void DrawPortAndBaudrateChooser();
 
-	//void DrawTooltip();
-	//void PlotHeatmap();
+	// void DrawTooltip();
+	// void PlotHeatmap();
 
 public:
 	ArduPlot();
 	void update() override;
 };
-
 
 float findMin(float arr[], int ArrSize);
 float findMax(float arr[], int ArrSize);
