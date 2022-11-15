@@ -17,7 +17,11 @@
 using namespace mahi::gui;
 using namespace mahi::util;
 
-ArduPlot::ArduPlot() : Application(1200, 600, "ArduPlot")
+#if __APPLE__
+ArduPlot::ArduPlot() : Application(500, 300, "ArduPlot")
+#elif __linux__
+ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
+#endif
 {
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -46,7 +50,7 @@ int serialport_read_until(int fd, char *buf, char until, int buf_max, int timeou
 			return -1; // couldn't read
 		if (n == 0)
 		{
-			usleep(1000); // wait 1000 usec and try again
+			//usleep(1000); // wait 1000 usec and try again // whyyyyyyyy - Dave 14 nov 2022
 			timeout--;
 			if (timeout == 0)
 				return -2;
@@ -98,8 +102,8 @@ void ConnectAndReadFromSerial(bool &join_read_thread, bool &connected, Lockable 
 		if (length >= 0)
 		{
 			Lock lock(lockable);
-			// new_data = true;
-			// USB_data = std::string(data, data + length);
+			new_data = true;
+			USB_data = std::string(data, data + length);
 			end = std::chrono::steady_clock::now();
 			if (std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() > 1000) // 1s
 			{

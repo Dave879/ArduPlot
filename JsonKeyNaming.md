@@ -4,9 +4,10 @@
 ## Features needed
 
 1. Choose type (int, float, bool, string) + arrays
-2. Choose graph type (line, bar, heatmap)
-3. Insert id, to persist additional graph customizations (line type, color...), and to merge data from multiple sensors
-4. Have a human readable name
+1. Choose graph type (line, bar, heatmap)
+1. Insert id, to persist additional graph customizations (line type, color...), and to merge data from multiple sensors
+1. Have a human readable name
+1. Option for log-only data !!!
 
 ## Proposed solution
 
