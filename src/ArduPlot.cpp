@@ -4,13 +4,12 @@
 #include <string>
 #include <thread>
 #include <mutex>
-#include <enumserial.h>
-#include <serialport.h>
 #include <json.hpp>
 #include <imgui.h>
 
-#include "ArduPlot.h"
-#include "utils.h"
+#include "arduplot.h"
+#include "utilities.h"
+#include "usb_input.h"
 
 #include "log.h"
 
@@ -30,98 +29,27 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 void ArduPlot::update()
 {
 	ImGui::DockSpaceOverViewport();
-	if (connected_to_device)
-		ParseJson();
+	ImGui::ShowDemoWindow();
 
-	DrawPlots();
-	DrawPortAndBaudrateChooser();
-	ShowExampleAppLog(json_data.dump(4), !connected_to_device, safe_new_data);
-	// PlotHeatmap();
+	SerialConsoleDisplay("a");
 }
 
-int serialport_read_until(int fd, char *buf, char until, int buf_max, int timeout)
+void ArduPlot::SerialConsoleDisplay(const std::string contents)
 {
-	char b[1]; // read expects an array, so we give it a 1-byte array
-	int i = 0;
-	do
-	{
-		int n = read(fd, b, 1); // read a char at a time
-		if (n == -1)
-			return -1; // couldn't read
-		if (n == 0)
-		{
-			//usleep(1000); // wait 1000 usec and try again // whyyyyyyyy - Dave 14 nov 2022
-			timeout--;
-			if (timeout == 0)
-				return -2;
-			continue;
-		}
-#ifdef SERIALPORTDEBUG
-		printf("serialport_read_until: i=%d, n=%d b='%c'\n", i, n, b[0]); // debug
-#endif
-		buf[i] = b[0];
-		i++;
-	} while (b[0] != until && i < buf_max && timeout > 0);
+	// For the demo: add a debug button _BEFORE_ the normal log window contents
+	// We take advantage of a rarely used feature: multiple calls to Begin()/End() are appending to the _same_ window.
+	// Most of the contents of the window will be added by the log.Draw() call.
+	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+	ImGui::Begin("Serial Console", nullptr);
+	if (contents != "")
+		serial_console.AddLog(contents.c_str());
 
-	buf[i] = '\0'; // null terminate the string
-	return i;
+	ImGui::End();
+	// Actually call in the regular Log helper (which will Begin() into the same window as we just did)
+	serial_console.Draw("Serial Console", nullptr);
 }
 
-void ConnectAndReadFromSerial(bool &join_read_thread, bool &connected, Lockable &lockable, std::string port, std::string baudrate, std::string &USB_data, bool &new_data)
-{
-	char data[500] = {0};
-	int length;
-
-	std::string s = "/dev/" + port;
-	int sfd = 0;
-	try
-	{
-		sfd = openAndConfigureSerialPort(s.c_str(), std::stoi(baudrate));
-		if (sfd > 0)
-		{
-			AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd)
-				connected = true;
-		}
-		else
-		{
-			AP_LOG_r("There was an error connecting to " << s)
-		}
-	}
-	catch (const std::exception &e)
-	{
-		AP_LOG_r(e.what());
-	}
-	// flushSerialData();
-
-	uint64_t bit_sum_in_one_second = 0;
-	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-	while (!join_read_thread)
-	{
-		length = serialport_read_until(sfd, data, '\n', 500, 100);
-		if (length >= 0)
-		{
-			Lock lock(lockable);
-			new_data = true;
-			USB_data = std::string(data, data + length);
-			end = std::chrono::steady_clock::now();
-			if (std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() > 1000) // 1s
-			{
-				float mb_s = bit_sum_in_one_second * 0.000001f;
-				AP_LOG_r(bit_sum_in_one_second << "b/s = " << mb_s << "Mb/s")
-					begin = std::chrono::steady_clock::now();
-				bit_sum_in_one_second = 0;
-			}
-			else
-			{
-				bit_sum_in_one_second += length * 8;
-			}
-		}
-		new_data = false;
-	}
-	closeSerialPort();
-}
-
+/*
 void ArduPlot::UpdateDataStructures(json &j)
 {
 	for (auto &[key, value] : j.items())
@@ -175,7 +103,7 @@ void ArduPlot::ParseJson()
 		if (new_data)
 		{
 			AP_LOG_b("Nuovi dati " << seconds_since_start << "s")
-				safe_incoming_data = incoming_data;
+				 safe_incoming_data = incoming_data;
 			safe_new_data = new_data;
 		}
 	}
@@ -199,7 +127,7 @@ void ArduPlot::ParseJson()
 			catch (json::parse_error &ex)
 			{
 				AP_LOG_r("safe_incoming_data")
-					AP_LOG_r(safe_incoming_data)
+					 AP_LOG_r(safe_incoming_data)
 			}
 		}
 }
@@ -226,62 +154,32 @@ void ArduPlot::DrawPlots()
 	}
 }
 
-std::vector<std::string> ArduPlot::ScanForAvailableBoards()
+// clang-format off
+void ArduPlot::DrawMenuBar()
 {
-	EnumSerial enumserial;
-	return enumserial.EnumSerialPort(); // Enum device driver of serial port
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("Select binary location"))
+		{
+			if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
+			if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {} // Disabled item
+			ImGui::Separator();
+			if (ImGui::MenuItem("Cut", "CTRL+X")) {}
+			if (ImGui::MenuItem("Copy", "CTRL+C")) {}
+			if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Option")) {
+			if (ImGui::MenuItem("Test", "CTRL+SOS")) {}
+			ImGui::EndMenu();
+		}
+		ImGui::EndMainMenuBar();
+	}
 }
+// clang-format on
 
-void ArduPlot::DrawPortAndBaudrateChooser()
+void ArduPlot::DrawDataInputPanel()
 {
-	ImGui::Begin("Port - Baudrate chooser");
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
-	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.
-	{
-		paths = ScanForAvailableBoards();
-		for (int n = 0; n < paths.size(); n++)
-		{
-			bool is_selected = (current_item == paths.at(n)); // You can store your selection however you want, outside or inside your objects
-			if (ImGui::Selectable(paths.at(n).c_str(), is_selected))
-				current_item = paths.at(n);
-			if (is_selected)
-				ImGui::SetItemDefaultFocus(); // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
-		}
-		ImGui::EndCombo();
-	}
-	ImGui::SameLine();
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-	if (ImGui::BeginCombo("##baudratecombo", current_baudrate)) // The second parameter is the label previewed before opening the combo.
-	{
-		for (int n = 0; n < IM_ARRAYSIZE(baudrate_list); n++)
-		{
-			bool is_selected = (current_baudrate == baudrate_list[n]); // You can store your selection however you want, outside or inside your objects
-			if (ImGui::Selectable(baudrate_list[n], is_selected))
-				current_baudrate = baudrate_list[n];
-			if (is_selected)
-				ImGui::SetItemDefaultFocus(); // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
-		}
-		ImGui::EndCombo();
-	}
-	if (ImGui::Button(!connected_to_device ? "Connect" : "Disconnect", ImGui::GetContentRegionAvail()))
-	{
-		if (!connected_to_device)
-		{
-			serial_read_thread = std::thread(ConnectAndReadFromSerial, std::ref(join_read_thread), std::ref(connected_to_device), std::ref(mtx), current_item, current_baudrate, std::ref(incoming_data), std::ref(new_data));
-		}
-		else
-		{
-			join_read_thread = true;
-			while (!serial_read_thread.joinable())
-			{
-				AP_LOG("Waiting for thread to be joinable...")
-			}
-			serial_read_thread.join();
-			join_read_thread = false;
-			connected_to_device = false;
-		}
-	}
-	ImGui::End();
 
 	ImGui::Begin("Performance profiler");
 	ImGui::Text("%i b/s", bytes_per_second * 8);
@@ -291,6 +189,7 @@ void ArduPlot::DrawPortAndBaudrateChooser()
 	ImGui::Text("%f Mb/s", mb);
 	ImGui::End();
 }
+*/
 
 /* PlotHeatmap
 void ArduPlot::PlotHeatmap()

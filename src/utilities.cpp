@@ -1,5 +1,4 @@
-
-#include "utils.h"
+#include "utilities.h"
 
 ScrollingBuffer::ScrollingBuffer(int max_size)
 {

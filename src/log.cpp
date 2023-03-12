@@ -10,20 +10,20 @@
 //  my_log.AddLog("Hello %d world\n", 123);
 //  my_log.Draw("title");
 
-ExampleAppLog::ExampleAppLog()
+SerialConsole::SerialConsole()
 {
 	AutoScroll = true;
 	Clear();
 }
 
-void ExampleAppLog::Clear()
+void SerialConsole::Clear()
 {
 	Buf.clear();
 	LineOffsets.clear();
 	LineOffsets.push_back(0);
 }
 
-void ExampleAppLog::AddLog(const char *fmt, ...)
+void SerialConsole::AddLog(const char *fmt, ...)
 {
 	int old_size = Buf.size();
 	va_list args;
@@ -35,7 +35,7 @@ void ExampleAppLog::AddLog(const char *fmt, ...)
 			LineOffsets.push_back(old_size + 1);
 }
 
-void ExampleAppLog::Draw(const char *title, bool *p_open = NULL)
+void SerialConsole::Draw(const char *title, bool *p_open = NULL)
 {
 	if (!ImGui::Begin(title, p_open))
 	{
@@ -120,23 +120,4 @@ void ExampleAppLog::Draw(const char *title, bool *p_open = NULL)
 
 	ImGui::EndChild();
 	ImGui::End();
-}
-
-// Demonstrate creating a simple log window with basic filtering.
-void ShowExampleAppLog(const std::string contents, const bool stopFlow, const bool &newData)
-{
-	static ExampleAppLog log;
-
-	// For the demo: add a debug button _BEFORE_ the normal log window contents
-	// We take advantage of a rarely used feature: multiple calls to Begin()/End() are appending to the _same_ window.
-	// Most of the contents of the window will be added by the log.Draw() call.
-	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
-	ImGui::Begin("Serial Console", nullptr);
-	if (contents != "" && contents != "null" && !stopFlow && newData){
-		log.AddLog(contents.c_str());
-		log.AddLog("\n");
-	}
-	ImGui::End();
-	// Actually call in the regular Log helper (which will Begin() into the same window as we just did)
-	log.Draw("Serial Console", nullptr);
 }

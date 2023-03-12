@@ -1,5 +1,5 @@
 
-#include "ArduPlot.h"
+#include "arduplot.h"
 
 int main()
 {

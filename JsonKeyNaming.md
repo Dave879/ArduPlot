@@ -9,13 +9,15 @@
 1. Have a human readable name
 1. Option for log-only data !!!
 
-## Proposed solution
+## Recurring messages
 
 id: hex 16 bit number (65536 possible ids)
 type:
+
+``` txt
 n: number
 b: boolean
-s: string
+s: string // Log
 (+ a if array type: na -> number array)
 graph type:
 l: line
@@ -23,6 +25,7 @@ b: bar
 h: heatmap (+ number of pixels in row * number of pixels in column)
 t: text
 name preceded by ">": >Graph name
+```
 
 Complete example:
 
