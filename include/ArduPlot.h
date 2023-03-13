@@ -1,13 +1,13 @@
+#pragma once
 #include <Mahi/Gui.hpp>
 #include <Mahi/Util.hpp>
 #include <vector>
 #include <string>
 #include <atomic>
 #include <thread>
-#include <enumserial.h>
-#include <serialport.h>
 #include <json.hpp>
 
+#include "usb_input.h"
 #include "utilities.h"
 #include "log.h"
 
@@ -20,14 +20,12 @@ class ArduPlot : public Application
 private:
 	// Mutex mtx;
 	std::vector<std::string> paths;
-	// const char *baudrate_list[14] = {"110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "38400", "57600", "115200", "128000", "256000"};
-	// const char *current_baudrate = "115200";
-#if __APPLE__
-	std::string current_item = "cu.usbmodem110007001";
-#elif __linux__
-	std::string current_item = "ttyACM1";
-#endif
 	SerialConsole serial_console;
+	uint16_t counter = 0;
+	uint16_t tps = 0;
+	double startTime;
+	USBInput input_stream = USBInput();
+
 	void SerialConsoleDisplay(const std::string contents = "");
 	/*
 		std::vector<iDGraphData> id_graphs;

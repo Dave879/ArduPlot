@@ -2,10 +2,80 @@
 
 USBInput::USBInput()
 {
+	paths = ScanForAvailableBoards();
+	if (paths.size() > 0)
+		current_item = paths.at(0);
+	else
+		current_item = "";
 }
 
 USBInput::~USBInput()
 {
+}
+
+void USBInput::DrawDataInputPanel()
+{
+	ImGui::Begin("USB input");
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.
+	{
+		paths = ScanForAvailableBoards();
+		for (int n = 0; n < paths.size(); n++)
+		{
+			bool is_selected = (current_item == paths.at(n)); // You can store your selection however you want, outside or inside your objects
+			if (ImGui::Selectable(paths.at(n).c_str(), is_selected))
+				current_item = paths.at(n);
+			if (is_selected)
+				ImGui::SetItemDefaultFocus(); // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
+		}
+		ImGui::EndCombo();
+	}
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+
+	if (ImGui::Button(!connected_to_device ? "Connect" : "Disconnect", ImGui::GetContentRegionAvail()))
+	{
+		if (!connected_to_device)
+		{
+			ConnectToUSB(current_item);
+		}
+		else
+		{
+			closeSerialPort();
+			AP_LOG_g("Closed USB connection")
+		}
+		connected_to_device = !connected_to_device;
+	}
+	ImGui::End();
+}
+/* Alternative GetData();
+std::string USBInput::GetData()
+{
+	if (connected_to_device)
+	{
+		length = serialport_read_until(sfd, data, '\n', 500, 100);
+		if (length >= 0)
+		{
+			return std::string(data, data + length);
+		}
+		else
+		{
+			return "";
+		}
+	}
+	return "";
+}
+
+*/
+
+std::string USBInput::GetData()
+{
+	if (connected_to_device)
+	{
+		uint32_t len = Read(sfd, data);
+		return std::string(data, data + len);
+	}
+	return "";
 }
 
 int USBInput::serialport_read_until(int fd, char *buf, char until, int buf_max, int timeout)
@@ -36,20 +106,29 @@ int USBInput::serialport_read_until(int fd, char *buf, char until, int buf_max, 
 	return i;
 }
 
-void USBInput::ConnectAndReadFromSerial(bool &join_read_thread, bool &connected, mahi::util::Lockable &lockable, std::string port, std::string baudrate, std::string &USB_data, bool &new_data)
+uint32_t USBInput::Read(int fd, char *buf)
+{ // TODO: make sure bytes_available < buffer size
+	uint32_t bytes_available;
+	ioctl(fd, FIONREAD, &bytes_available);
+	int n = read(fd, buf, bytes_available); // read a char at a time
+	if (n == -1)
+		return 0;		// couldn't read
+	buf[bytes_available + 1] = '\0'; // null terminate the string
+	return bytes_available;
+}
+
+void USBInput::ConnectToUSB(std::string port)
 {
 	char data[500] = {0};
 	int length;
 
 	std::string s = "/dev/" + port;
-	int sfd = 0;
 	try
 	{
-		sfd = openAndConfigureSerialPort(s.c_str(), std::stoi(baudrate));
+		sfd = openAndConfigureSerialPort(s.c_str(), 115200); // Fake baudrate, need to implement it correctly for actual Arduino boards with serial to usb chip
 		if (sfd > 0)
 		{
 			AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd)
-				 connected = true;
 		}
 		else
 		{
@@ -60,35 +139,7 @@ void USBInput::ConnectAndReadFromSerial(bool &join_read_thread, bool &connected,
 	{
 		AP_LOG_r(e.what());
 	}
-	// flushSerialData();
-
-	uint64_t bit_sum_in_one_second = 0;
-	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-	while (!join_read_thread)
-	{
-		length = serialport_read_until(sfd, data, '\n', 500, 100);
-		if (length >= 0)
-		{
-			mahi::util::Lock lock(lockable);
-			new_data = true;
-			USB_data = std::string(data, data + length);
-			end = std::chrono::steady_clock::now();
-			if (std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() > 1000) // 1s
-			{
-				float mb_s = bit_sum_in_one_second * 0.000001f;
-				AP_LOG_r(bit_sum_in_one_second << "b/s = " << mb_s << "Mb/s")
-					 begin = std::chrono::steady_clock::now();
-				bit_sum_in_one_second = 0;
-			}
-			else
-			{
-				bit_sum_in_one_second += length * 8;
-			}
-		}
-		new_data = false;
-	}
-	closeSerialPort();
+	flushSerialData();
 }
 
 std::vector<std::string> USBInput::ScanForAvailableBoards()

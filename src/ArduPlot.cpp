@@ -24,14 +24,23 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 {
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	startTime = ImGui::GetTime();
 }
 
 void ArduPlot::update()
 {
+	input_stream.DrawDataInputPanel();
 	ImGui::DockSpaceOverViewport();
 	ImGui::ShowDemoWindow();
+	if((startTime + 1.0f) < ImGui::GetTime()){
+		tps = counter;
+		counter = 0;
+		startTime = ImGui::GetTime();
+	} else {
+		counter++;
+	}
 
-	SerialConsoleDisplay("a");
+	SerialConsoleDisplay(input_stream.GetData());
 }
 
 void ArduPlot::SerialConsoleDisplay(const std::string contents)
