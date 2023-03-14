@@ -43,22 +43,14 @@ void SerialConsole::Draw(const char *title, bool *p_open = NULL)
 		return;
 	}
 
-	// Options menu
-	if (ImGui::BeginPopup("Options"))
-	{
-		ImGui::Checkbox("Auto-scroll", &AutoScroll);
-		ImGui::EndPopup();
-	}
 
-	// Main window
-	if (ImGui::Button("Options"))
-		ImGui::OpenPopup("Options");
-	ImGui::SameLine();
 	bool clear = ImGui::Button("Clear");
 	ImGui::SameLine();
 	bool copy = ImGui::Button("Copy");
 	ImGui::SameLine();
-	Filter.Draw("Filter", -100.0f);
+	Filter.Draw("Filter", -150.0f);
+	ImGui::SameLine();
+	ImGui::Checkbox("Auto-scroll", &AutoScroll);
 
 	ImGui::Separator();
 	ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);

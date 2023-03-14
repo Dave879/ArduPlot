@@ -41,16 +41,18 @@ std::vector<std::string> EnumSerial::EnumSerialPort()
    while ((dirp = readdir(dp)) != NULL)
    {
       std::string filename(dirp->d_name);
-      if (filename.find(std::string("cu.")) != std::string::npos)
+      if (filename.find(std::string("cu.")) != std::string::npos && filename.find(std::string("BLTH")) == std::string::npos)
       {
          paths.push_back(std::string(dirp->d_name));
          continue;
       }
-      if (filename.find(std::string("tty.")) != std::string::npos)
+      /*
+      if (filename.find(std::string("tty.")) != std::string::npos filename.find(std::string("BLTH")) != std::string::npos)
       {
          paths.push_back(std::string(dirp->d_name));
          continue;
       }
+      */
    }
    closedir(dp);
 #endif

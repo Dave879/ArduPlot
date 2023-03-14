@@ -31,12 +31,15 @@ void ArduPlot::update()
 {
 	input_stream.DrawDataInputPanel();
 	ImGui::DockSpaceOverViewport();
-	ImGui::ShowDemoWindow();
-	if((startTime + 1.0f) < ImGui::GetTime()){
+	// ImGui::ShowDemoWindow();
+	if ((startTime + 1.0f) < ImGui::GetTime())
+	{
 		tps = counter;
 		counter = 0;
 		startTime = ImGui::GetTime();
-	} else {
+	}
+	else
+	{
 		counter++;
 	}
 

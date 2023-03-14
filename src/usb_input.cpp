@@ -17,14 +17,48 @@ void USBInput::DrawDataInputPanel()
 {
 	ImGui::Begin("USB input");
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+	paths = ScanForAvailableBoards();
+	if (paths.size() == 0)
+	{
+		current_item = "";
+		if (connected_to_device)
+		{
+			connected_to_device = false;
+			closeSerialPort();
+			AP_LOG_g("Closed USB connection");
+			paths = ScanForAvailableBoards();
+			if (paths.size() > 0)
+				current_item = paths.at(0);
+			else
+				current_item = "";
+		}
+	}
+	else
+	{
+		for (uint8_t i = 0; i < paths.size(); i++)
+		{
+			if (paths.at(i) == last_item)
+			{
+				current_item = last_item;
+				if (!connected_to_device && !pressed_disconnect)
+				{
+					if (ConnectToUSB(current_item) == 0)
+						connected_to_device = true;
+				}
+				break;
+			}
+		}
+	}
 	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.
 	{
-		paths = ScanForAvailableBoards();
 		for (int n = 0; n < paths.size(); n++)
 		{
 			bool is_selected = (current_item == paths.at(n)); // You can store your selection however you want, outside or inside your objects
 			if (ImGui::Selectable(paths.at(n).c_str(), is_selected))
+			{
 				current_item = paths.at(n);
+				last_item = current_item;
+			}
 			if (is_selected)
 				ImGui::SetItemDefaultFocus(); // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
 		}
@@ -37,12 +71,20 @@ void USBInput::DrawDataInputPanel()
 	{
 		if (!connected_to_device)
 		{
-			ConnectToUSB(current_item);
+			pressed_disconnect = false;
+			if (ConnectToUSB(current_item) == 0)
+				connected_to_device = false;
 		}
 		else
 		{
+			pressed_disconnect = true;
 			closeSerialPort();
-			AP_LOG_g("Closed USB connection")
+			AP_LOG_g("Closed USB connection");
+			paths = ScanForAvailableBoards();
+			if (paths.size() > 0)
+				current_item = paths.at(0);
+			else
+				current_item = "";
 		}
 		connected_to_device = !connected_to_device;
 	}
@@ -107,39 +149,49 @@ int USBInput::serialport_read_until(int fd, char *buf, char until, int buf_max, 
 }
 
 uint32_t USBInput::Read(int fd, char *buf)
-{ // TODO: make sure bytes_available < buffer size
+{
 	uint32_t bytes_available;
+	int n;
 	ioctl(fd, FIONREAD, &bytes_available);
-	int n = read(fd, buf, bytes_available); // read a char at a time
+	if (bytes_available > CHAR_BUF_SIZE)
+	{
+		n = read(fd, buf, CHAR_BUF_SIZE);
+		bytes_available = CHAR_BUF_SIZE;
+	}
+	else
+	{
+		n = read(fd, buf, bytes_available);
+	}
+
 	if (n == -1)
-		return 0;		// couldn't read
+		return 0;							// couldn't read
 	buf[bytes_available + 1] = '\0'; // null terminate the string
 	return bytes_available;
 }
 
-void USBInput::ConnectToUSB(std::string port)
+uint8_t USBInput::ConnectToUSB(std::string port)
 {
-	char data[500] = {0};
-	int length;
-
 	std::string s = "/dev/" + port;
 	try
 	{
 		sfd = openAndConfigureSerialPort(s.c_str(), 115200); // Fake baudrate, need to implement it correctly for actual Arduino boards with serial to usb chip
 		if (sfd > 0)
 		{
-			AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd)
+			AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd);
+			return 0;
 		}
 		else
 		{
-			AP_LOG_r("There was an error connecting to " << s)
+			AP_LOG_r("There was an error connecting to " << s);
+			return 1;
 		}
 	}
 	catch (const std::exception &e)
 	{
 		AP_LOG_r(e.what());
+		return 1;
 	}
-	flushSerialData();
+	// flushSerialData();
 }
 
 std::vector<std::string> USBInput::ScanForAvailableBoards()
