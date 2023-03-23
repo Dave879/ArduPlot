@@ -11,18 +11,20 @@
 //  my_log.Draw("title");
 class SerialConsole
 {
-	public:
+private:
+	std::string name;
 	ImGuiTextBuffer Buf;
 	ImGuiTextFilter Filter;
 	ImVector<int> LineOffsets; // Index to lines offset. We maintain this with AddLog() calls.
-	bool AutoScroll;		   // Keep scrolling if already at the bottom.
+	bool AutoScroll;				// Keep scrolling if already at the bottom.
 
-	SerialConsole();
 
 	void Clear();
-
 	void AddLog(const char *fmt, ...);
-
 	void Draw(const char *title, bool *p_open);
 
+public:
+	SerialConsole(std::string console_name);
+	void Display();
+	void Add(const std::string content);
 };

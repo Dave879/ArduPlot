@@ -120,34 +120,6 @@ std::string USBInput::GetData()
 	return "";
 }
 
-int USBInput::serialport_read_until(int fd, char *buf, char until, int buf_max, int timeout)
-{
-	char b[1]; // read expects an array, so we give it a 1-byte array
-	int i = 0;
-	do
-	{
-		int n = read(fd, b, 1); // read a char at a time
-		if (n == -1)
-			return -1; // couldn't read
-		if (n == 0)
-		{
-			// usleep(1000); // wait 1000 usec and try again // whyyyyyyyy - Dave 14 nov 2022
-			timeout--;
-			if (timeout == 0)
-				return -2;
-			continue;
-		}
-#ifdef SERIALPORTDEBUG
-		printf("serialport_read_until: i=%d, n=%d b='%c'\n", i, n, b[0]); // debug
-#endif
-		buf[i] = b[0];
-		i++;
-	} while (b[0] != until && i < buf_max && timeout > 0);
-
-	buf[i] = '\0'; // null terminate the string
-	return i;
-}
-
 uint32_t USBInput::Read(int fd, char *buf)
 {
 	uint32_t bytes_available;
@@ -167,6 +139,10 @@ uint32_t USBInput::Read(int fd, char *buf)
 		return 0;							// couldn't read
 	buf[bytes_available + 1] = '\0'; // null terminate the string
 	return bytes_available;
+}
+
+bool USBInput::IsConnected(){
+	return connected_to_device;
 }
 
 uint8_t USBInput::ConnectToUSB(std::string port)

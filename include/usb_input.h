@@ -31,8 +31,8 @@ public:
 	void DrawDataInputPanel();
 	uint32_t Read(int fd, char *buf);
 	std::string GetData();
-	int serialport_read_until(int fd, char *buf, char until, int buf_max, int timeout);
 	uint8_t ConnectToUSB(std::string port);
+	bool IsConnected();
 
 	static std::vector<std::string> ScanForAvailableBoards();
 };

@@ -25,43 +25,65 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	startTime = ImGui::GetTime();
+	data_buffer = "";
+	current_data_packet = "";
 }
 
 void ArduPlot::update()
 {
-	input_stream.DrawDataInputPanel();
 	ImGui::DockSpaceOverViewport();
-	// ImGui::ShowDemoWindow();
-	if ((startTime + 1.0f) < ImGui::GetTime())
-	{
-		tps = counter;
-		counter = 0;
-		startTime = ImGui::GetTime();
-	}
-	else
-	{
-		counter++;
-	}
+	input_stream.DrawDataInputPanel();
 
-	SerialConsoleDisplay(input_stream.GetData());
+	current_data_packet = input_stream.GetData();
+	data_buffer += current_data_packet;
+	std::string pkt = "";
+	do
+	{
+		pkt = GetFirstJsonPacketInBuffer(data_buffer);
+		if (pkt.length() > 0)
+		{
+			try
+			{
+				json_data = json::parse(pkt);
+				UpdateDataStructures(json_data);
+				json_console.Add(json_data.dump(4)); // Display window
+			}
+			catch (const std::exception &e)
+			{
+				AP_LOG_r(pkt);
+				AP_LOG_r("Exception when parsing json");
+				AP_LOG_r(e.what());
+			}
+		}
+	} while (pkt.length() > 0); // Need to modify value, not perfect solution
+
+	DrawPlots();
+
+	serial_console.Display();
+	json_console.Display();
+	seconds_since_start += ImGui::GetIO().DeltaTime;
 }
 
-void ArduPlot::SerialConsoleDisplay(const std::string contents)
+std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 {
-	// For the demo: add a debug button _BEFORE_ the normal log window contents
-	// We take advantage of a rarely used feature: multiple calls to Begin()/End() are appending to the _same_ window.
-	// Most of the contents of the window will be added by the log.Draw() call.
-	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
-	ImGui::Begin("Serial Console", nullptr);
-	if (contents != "")
-		serial_console.AddLog(contents.c_str());
+	int64_t found_opening = -1;
+	for (uint64_t i = 0; i < data_buffer.length(); i++)
+	{
+		if (data_buffer.at(i) == '{')
+		{
+			found_opening = i;
+		}
 
-	ImGui::End();
-	// Actually call in the regular Log helper (which will Begin() into the same window as we just did)
-	serial_console.Draw("Serial Console", nullptr);
+		if (data_buffer.at(i) == '}' && found_opening >= 0)
+		{
+			std::string packet = data_buffer.substr(found_opening, i + 1);
+			data_buffer = data_buffer.substr(i + 1);
+			return packet;
+		}
+	}
+	return "";
 }
 
-/*
 void ArduPlot::UpdateDataStructures(json &j)
 {
 	for (auto &[key, value] : j.items())
@@ -77,6 +99,8 @@ void ArduPlot::UpdateDataStructures(json &j)
 					try
 					{
 						id_graphs.at(graphID).graphName = graphName;
+						id_graphs.at(graphID).min = std::stoi(key.substr(6, 16), 0, 16);
+						id_graphs.at(graphID).max = std::stoi(key.substr(22, 16), 0, 16);
 						id_graphs.at(graphID).buffer.AddPoint(seconds_since_start, std::stof(value.dump()));
 					}
 					catch (const std::exception &e)
@@ -84,10 +108,9 @@ void ArduPlot::UpdateDataStructures(json &j)
 						iDGraphData gd(graphName, GraphType::LINE);
 						if (key.substr(5, 1) == "b")
 							gd.type = GraphType::BAR;
-
 						gd.buffer.AddPoint(seconds_since_start, std::stof(value.dump()));
 						id_graphs.push_back(gd);
-						AP_LOG_b("New graph data structure was created")
+						AP_LOG_b("Created new graph")
 					}
 				}
 				else if (key.substr(5, 1) == "h") // Update data structure for heatmap
@@ -96,6 +119,11 @@ void ArduPlot::UpdateDataStructures(json &j)
 			}
 			else if (key.substr(4, 1) == "s")
 			{
+				std::string contents = value.dump().c_str();
+				contents = contents.substr(1, contents.length() - 2);
+				contents.replace(contents.find("\\"), 2, "\n");
+				serial_console.Add(contents.c_str());
+				contents = "";
 			}
 			else if (key.substr(4, 1) == "b")
 			{
@@ -103,10 +131,51 @@ void ArduPlot::UpdateDataStructures(json &j)
 		}
 		catch (const std::exception &e)
 		{
-			AP_LOG_r(e.what())
+			AP_LOG_r("Exception in UpdateDataStructures:");
+			AP_LOG_r(e.what());
 		}
 	}
 }
+void ArduPlot::DrawPlots()
+{
+	for (uint16_t i = 0; i < id_graphs.size(); i++)
+	{
+		ImGui::Begin(id_graphs.at(i).graphName.c_str());
+
+		ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
+
+		static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
+		ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
+
+		ImPlot::SetNextPlotLimitsY(id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
+		if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
+		{
+			ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
+			ImPlot::EndPlot();
+		}
+		ImGui::End();
+	}
+	/*
+	for (uint16_t i = 0; i < iid_graphs.size(); i++)
+	{
+		ImGui::Begin(iid_graphs.at(i).graphName.c_str());
+
+		ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
+
+		static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
+		ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
+		ImPlot::SetNextPlotLimitsY(-10, 4000);
+		if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
+		{
+			ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
+			ImPlot::EndPlot();
+		}
+		ImGui::End();
+	}
+	*/
+}
+
+/*
 
 void ArduPlot::ParseJson()
 {
@@ -144,27 +213,6 @@ void ArduPlot::ParseJson()
 		}
 }
 
-void ArduPlot::DrawPlots()
-{
-	for (uint16_t i = 0; i < id_graphs.size(); i++)
-	{
-		ImGui::Begin(id_graphs.at(i).graphName.c_str());
-
-		seconds_since_start += ImGui::GetIO().DeltaTime;
-
-		ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
-
-		static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
-		ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
-		ImPlot::SetNextPlotLimitsY(-10, 4000);
-		if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
-		{
-			ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
-			ImPlot::EndPlot();
-		}
-		ImGui::End();
-	}
-}
 
 // clang-format off
 void ArduPlot::DrawMenuBar()

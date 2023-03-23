@@ -18,41 +18,24 @@ class ArduPlot : public Application
 {
 
 private:
-	// Mutex mtx;
 	std::vector<std::string> paths;
-	SerialConsole serial_console;
+	SerialConsole serial_console = SerialConsole("Serial Console");
+	SerialConsole json_console = SerialConsole("Json Console");
 	uint16_t counter = 0;
 	uint16_t tps = 0;
 	double startTime;
 	USBInput input_stream = USBInput();
 
-	void SerialConsoleDisplay(const std::string contents = "");
-	/*
-		std::vector<iDGraphData> id_graphs;
-		std::vector<iiDGraphData> iid_graphs;
-		std::thread serial_read_thread;
-		float seconds_since_start = 0;
-		int16_t bytes_per_second = 0;
-		int16_t bytes_received_total = 0;
-		int16_t bytes_received_prior = 0;
-		float past_measurement_time = 0;
-		bool new_data = false;
-		bool safe_new_data = true;
-		std::string incoming_data = "";
-		std::string safe_incoming_data = "";
+	std::string data_buffer = "";
+	std::string current_data_packet = "";
 
-		json json_data;
-
-		bool connected_to_device = false;
-		bool join_read_thread = false;
-		void ParseJson();
-		void UpdateDataStructures(json &j);
-		void DrawPlots();
-		void DrawDataInputPanel();
-		void DrawMenuBar();
-		void DrawTooltip();
-		void PlotHeatmap();
-	*/
+	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
+	json json_data;
+	std::vector<iDGraphData> id_graphs;
+	//std::vector<iiDGraphData> iid_graphs;
+	void UpdateDataStructures(json &j);
+	void DrawPlots();
+	float seconds_since_start = 0;
 
 public:
 	ArduPlot();

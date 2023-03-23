@@ -27,6 +27,13 @@ t: text
 name preceded by ">": >Graph name
 ```
 
+If selected graph is line, bar, or heatmap, the range can be specified, using 2 int16 values in hex, one after the other, first minimum then maximum
+
+``` txt
+min>max>
+0000ffff
+```
+
 Complete example:
 
 ``` json

@@ -30,7 +30,7 @@ struct ScrollingBuffer
 	int Offset;
 	ImVector<ImVec2> Data;
 
-	ScrollingBuffer(int max_size = 2000);
+	ScrollingBuffer(int max_size = 5000);
 	void AddPoint(float x, float y);
 	void Erase();
 };
@@ -47,6 +47,7 @@ struct iDGraphData
 	std::string graphName = "";
 	GraphType type;
 	ScrollingBuffer buffer;
+	int64_t min = 0, max = 0;
 
 	iDGraphData(std::string name = "Default", GraphType type = GraphType::LINE)
 	{

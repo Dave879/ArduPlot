@@ -10,10 +10,26 @@
 //  my_log.AddLog("Hello %d world\n", 123);
 //  my_log.Draw("title");
 
-SerialConsole::SerialConsole()
-{
+SerialConsole::SerialConsole(std::string console_name): name(console_name){
 	AutoScroll = true;
 	Clear();
+}
+
+void SerialConsole::Display(){
+		// For the demo: add a debug button _BEFORE_ the normal log window contents
+	// We take advantage of a rarely used feature: multiple calls to Begin()/End() are appending to the _same_ window.
+	// Most of the contents of the window will be added by the log.Draw() call.
+	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+	ImGui::Begin(name.c_str(), nullptr);
+
+	ImGui::End();
+	// Actually call in the regular Log helper (which will Begin() into the same window as we just did)
+	Draw(name.c_str(), nullptr);
+}
+
+void SerialConsole::Add(const std::string contents){
+	if (contents != "" && contents != "\n" && contents != "null")
+		AddLog(contents.c_str());
 }
 
 void SerialConsole::Clear()
