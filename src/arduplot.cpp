@@ -115,6 +115,7 @@ void ArduPlot::UpdateDataStructures(json &j)
 				}
 				else if (key.substr(5, 1) == "h") // Update data structure for heatmap
 				{
+					/*
 					uint16_t graphID = std::stoul(key.substr(0, 4), nullptr, 16);
 					std::string graphName = key.substr(key.find(">") + 1, key.size() - key.find(">"));
 					try
@@ -136,6 +137,7 @@ void ArduPlot::UpdateDataStructures(json &j)
 						iid_graphs.push_back(gd);
 						AP_LOG_b("Created new heatmap")
 					}
+					*/
 				}
 			}
 			else if (key.substr(4, 1) == "s")

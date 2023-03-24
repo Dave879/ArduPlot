@@ -55,6 +55,11 @@ std::vector<std::string> EnumSerial::EnumSerialPort()
       */
    }
    closedir(dp);
+#elif __linux__
+   for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/")){
+      if (dir.path().string().find("ACM") != std::string::npos)
+         paths.push_back(dir.path().string().substr(5));
+   }
 #endif
 
    return paths;
