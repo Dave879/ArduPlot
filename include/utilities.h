@@ -39,6 +39,7 @@ enum GraphType
 {
 	LINE,
 	BAR,
+	HEATMAP
 };
 
 struct iDGraphData
@@ -59,7 +60,13 @@ struct iDGraphData
 struct iiDGraphData
 {
 	std::string graphName = "";
-	ScrollingBuffer buffer;
+	std::vector<int64_t> buffer;
+	uint64_t sizex, sizey;
+	int64_t min = 0, max = 0;
+	iiDGraphData(std::string name = "Default")
+	{
+		this->graphName = name;
+	}
 };
 
 struct sGraphData

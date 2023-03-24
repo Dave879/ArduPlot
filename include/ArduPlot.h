@@ -32,7 +32,7 @@ private:
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	json json_data;
 	std::vector<iDGraphData> id_graphs;
-	//std::vector<iiDGraphData> iid_graphs;
+	std::vector<iiDGraphData> iid_graphs;
 	void UpdateDataStructures(json &j);
 	void DrawPlots();
 	float seconds_since_start = 0;

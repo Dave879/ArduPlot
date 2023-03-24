@@ -115,6 +115,27 @@ void ArduPlot::UpdateDataStructures(json &j)
 				}
 				else if (key.substr(5, 1) == "h") // Update data structure for heatmap
 				{
+					uint16_t graphID = std::stoul(key.substr(0, 4), nullptr, 16);
+					std::string graphName = key.substr(key.find(">") + 1, key.size() - key.find(">"));
+					try
+					{
+						iid_graphs.at(graphID).graphName = graphName;
+						iid_graphs.at(graphID).min = std::stoi(key.substr(6, 16), 0, 16);
+						iid_graphs.at(graphID).max = std::stoi(key.substr(22, 16), 0, 16);
+						iid_graphs.at(graphID).buffer.push_back(std::stof(value.dump()));
+					}
+					catch (const std::exception &e)
+					{
+						iiDGraphData gd(graphName);
+						id_graphs.at(graphID).min = std::stoi(key.substr(6, 16), 0, 16);
+						for (size_t i = 0; i < ; i++)
+						{
+							iid_graphs.at(graphID).buffer.push_back(std::stof(value.at(i)));
+						}
+
+						iid_graphs.push_back(gd);
+						AP_LOG_b("Created new heatmap")
+					}
 				}
 			}
 			else if (key.substr(4, 1) == "s")
