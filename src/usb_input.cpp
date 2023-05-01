@@ -125,7 +125,7 @@ uint32_t USBInput::Read(int fd, char *buf)
 	uint32_t bytes_available;
 	int n;
 	ioctl(fd, FIONREAD, &bytes_available);
-	if (bytes_available > CHAR_BUF_SIZE)
+	if (bytes_available >= CHAR_BUF_SIZE)
 	{
 		n = read(fd, buf, CHAR_BUF_SIZE);
 		bytes_available = CHAR_BUF_SIZE;

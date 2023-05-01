@@ -27,6 +27,7 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 	startTime = ImGui::GetTime();
 	data_buffer = "";
 	current_data_packet = "";
+	start_time = std::chrono::steady_clock::now();
 }
 
 void ArduPlot::update()
@@ -40,13 +41,13 @@ void ArduPlot::update()
 	do
 	{
 		pkt = GetFirstJsonPacketInBuffer(data_buffer);
-		if (pkt.length() > 0)
+		if (pkt != "")
 		{
 			try
 			{
 				json_data = json::parse(pkt);
 				UpdateDataStructures(json_data);
-				json_console.Add(json_data.dump(4)); // Display window
+				json_console.Add(json_data.dump(4));
 			}
 			catch (const std::exception &e)
 			{
@@ -55,18 +56,17 @@ void ArduPlot::update()
 				AP_LOG_r(e.what());
 			}
 		}
-	} while (pkt.length() > 0); // Need to modify value, not perfect solution
-
+	} while (pkt != "");
 	DrawPlots();
 
-	serial_console.Display();
 	json_console.Display();
+	serial_console.Display();
 	seconds_since_start += ImGui::GetIO().DeltaTime;
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 {
-	int64_t found_opening = -1;
+	int64_t found_opening = -100;
 	for (uint64_t i = 0; i < data_buffer.length(); i++)
 	{
 		if (data_buffer.at(i) == '{')
@@ -76,7 +76,7 @@ std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 
 		if (data_buffer.at(i) == '}' && found_opening >= 0)
 		{
-			std::string packet = data_buffer.substr(found_opening, i + 1);
+			std::string packet = data_buffer.substr(found_opening, (i - found_opening) + 1);
 			data_buffer = data_buffer.substr(i + 1);
 			return packet;
 		}
@@ -90,18 +90,19 @@ void ArduPlot::UpdateDataStructures(json &j)
 	{
 		try
 		{
-			if (key.substr(4, 1) == "n")
+			if (key.substr(4, 1) == "n") // If graph has numerical data
 			{
 				if (key.substr(5, 1) == "l" || key.substr(5, 1) == "b") // Update data structure for line or bar graph
 				{
 					uint16_t graphID = std::stoul(key.substr(0, 4), nullptr, 16);
+
 					std::string graphName = key.substr(key.find(">") + 1, key.size() - key.find(">"));
 					try
 					{
 						id_graphs.at(graphID).graphName = graphName;
 						id_graphs.at(graphID).min = std::stoi(key.substr(6, 16), 0, 16);
 						id_graphs.at(graphID).max = std::stoi(key.substr(22, 16), 0, 16);
-						id_graphs.at(graphID).buffer.AddPoint(seconds_since_start, std::stof(value.dump()));
+						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, std::stof(value.dump()));
 					}
 					catch (const std::exception &e)
 					{
@@ -115,29 +116,38 @@ void ArduPlot::UpdateDataStructures(json &j)
 				}
 				else if (key.substr(5, 1) == "h") // Update data structure for heatmap
 				{
-					/*
 					uint16_t graphID = std::stoul(key.substr(0, 4), nullptr, 16);
 					std::string graphName = key.substr(key.find(">") + 1, key.size() - key.find(">"));
 					try
 					{
 						iid_graphs.at(graphID).graphName = graphName;
-						iid_graphs.at(graphID).min = std::stoi(key.substr(6, 16), 0, 16);
-						iid_graphs.at(graphID).max = std::stoi(key.substr(22, 16), 0, 16);
-						iid_graphs.at(graphID).buffer.push_back(std::stof(value.dump()));
+						iid_graphs.at(graphID).sizex = std::stoul(key.substr(6, 4), nullptr, 16);
+						iid_graphs.at(graphID).sizey = std::stoul(key.substr(10, 4), nullptr, 16);
+						iid_graphs.at(graphID).min = std::stoi(key.substr(14, 8), nullptr, 16);
+						iid_graphs.at(graphID).max = std::stoi(key.substr(22, 8), nullptr, 16);
 					}
 					catch (const std::exception &e)
 					{
-						iiDGraphData gd(graphName);
-						id_graphs.at(graphID).min = std::stoi(key.substr(6, 16), 0, 16);
-						for (size_t i = 0; i < ; i++)
-						{
-							iid_graphs.at(graphID).buffer.push_back(std::stof(value.at(i)));
-						}
+						AP_LOG(key);
+						AP_LOG(key.substr(14, 8));
 
+						iiDGraphData gd(graphName);
 						iid_graphs.push_back(gd);
+						iid_graphs.at(graphID).sizex = std::stoul(key.substr(6, 4), nullptr, 16);
+						iid_graphs.at(graphID).sizey = std::stoul(key.substr(10, 4), nullptr, 16);
+						double min;
+						std::stringstream ss;
+						ss << std::hex << key.substr(14, 8);
+						ss >> min;
+						AP_LOG(min);
+						iid_graphs.at(graphID).max = std::stoi(key.substr(22, 8), nullptr, 16);
+						AP_LOG("X:" << iid_graphs.at(graphID).sizex << "Y:" << iid_graphs.at(graphID).sizey << "min:" << iid_graphs.at(graphID).min << "max:" << iid_graphs.at(graphID).max)
+						for (size_t i = 0; i < iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey; i++)
+						{
+							iid_graphs.at(graphID).buffer.push_back(std::stod(value.at(i).dump()));
+						}
 						AP_LOG_b("Created new heatmap")
 					}
-					*/
 				}
 			}
 			else if (key.substr(4, 1) == "s")
@@ -170,7 +180,8 @@ void ArduPlot::DrawPlots()
 		static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
 		ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
 
-		ImPlot::SetNextPlotLimitsY(id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
+		//ImPlot::SetNextPlotLimitsY(id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
+		ImPlot::SetNextPlotLimitsY(-2, 2);
 		if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
 		{
 			ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));

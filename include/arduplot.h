@@ -24,6 +24,7 @@ private:
 	uint16_t counter = 0;
 	uint16_t tps = 0;
 	double startTime;
+	std::chrono::steady_clock::time_point start_time;
 	USBInput input_stream = USBInput();
 
 	std::string data_buffer = "";
