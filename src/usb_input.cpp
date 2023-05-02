@@ -112,7 +112,7 @@ std::string USBInput::GetData()
 
 std::string USBInput::GetData()
 {
-	if (connected_to_device)
+//	if (connected_to_device)
 	{
 		uint32_t len = Read(sfd, data);
 		return std::string(data, data + len);

@@ -20,7 +20,7 @@ using namespace mahi::util;
 #if __APPLE__
 ArduPlot::ArduPlot() : Application(500, 300, "ArduPlot")
 #elif __linux__
-ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
+ArduPlot::ArduPlot() //: Application(1200, 500, "ArduPlot")
 #endif
 {
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
@@ -33,10 +33,14 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 
 void ArduPlot::update()
 {
+	/*
 	ImGui::DockSpaceOverViewport();
 	input_stream.DrawDataInputPanel();
-
+	*/
 	current_data_packet = input_stream.GetData();
+	AP_LOG("Size::::" << current_data_packet.size())
+	AP_LOG_b(">" << current_data_packet << "<")
+	Mb_s += current_data_packet.size();
 	data_buffer += current_data_packet;
 	std::string pkt = "";
 	do
@@ -49,7 +53,7 @@ void ArduPlot::update()
 				json_data = json::parse(pkt);
 				UpdateDataStructures(json_data);
 				pkt_idx_++;
-				json_console.Add(json_data.dump(4));
+				//json_console.Add(json_data.dump(4));
 			}
 			catch (const std::exception &e)
 			{
@@ -59,11 +63,24 @@ void ArduPlot::update()
 			}
 		}
 	} while (pkt != "");
-	DrawPlots();
+
+	if (measurement_start_time <= std::chrono::system_clock::now())
+	{
+		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+		Mb_s = Mb_s*8 / 1e+6;
+		AP_LOG_g(Mb_s << " Mb/s");
+		Mb_s = 0;
+		AP_LOG_b(count << " cycles");
+		count = 0;
+	}
+	count++;
+	/*
 	DrawStatWindow();
+	DrawPlots();
 	json_console.Display();
 	serial_console.Display();
 	seconds_since_start += ImGui::GetIO().DeltaTime;
+	*/
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
@@ -86,9 +103,14 @@ std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 	return "";
 }
 
-void ArduPlot::DrawStatWindow(){
+void ArduPlot::DrawStatWindow()
+{
 	ImGui::Begin("Stats");
 	ImGui::Text("Packets dropped: %llu", packets_lost);
+	ImGui::Text("Microcontroller index: %llu", uC_idx);
+	ImGui::Text("Internal index: %llu", pkt_idx_);
+	ImGui::Text("Throughput: %fMb/s", Mb_s);
+
 	ImGui::End();
 }
 
@@ -142,9 +164,10 @@ void ArduPlot::UpdateDataStructures(json &j)
 							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH), nullptr);
 							iid_graphs.at(graphID).has_set_min_max = true;
 						}
-						for (size_t i = 0; i < iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey; i++)
+						size_t len = iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey;
+						for (size_t i = 0; i < len; i++)
 						{
-							iid_graphs.at(graphID).buffer.push_back(std::stod(value.at(i).dump()));
+							iid_graphs.at(graphID).buffer.at(i) = std::stod(value.at(i).dump());
 						}
 					}
 					catch (const std::exception &e)
@@ -176,14 +199,29 @@ void ArduPlot::UpdateDataStructures(json &j)
 				contents.replace(contents.find("\\"), 2, "\n");
 				serial_console.Add(contents.c_str());
 				contents = "";
-			} else if(tkn.at(tkn_idx_::TYPE) == "i"){
-				uint64_t uC_idx = std::stoul(value.dump()); // Will be always equal or greater than local pkt_idx_
-				if (abs((int64_t)uC_idx-(int64_t)pkt_idx_) > 500) // Kind of bad solution
+			}
+			else if (tkn.at(tkn_idx_::TYPE) == "i")
+			{
+				uC_idx = std::stoul(value.dump());
+				if (uC_idx < pkt_idx_) // Microcontroller reflashed/rebooted/crashed/power was unplugged
 				{
 					pkt_idx_ = uC_idx;
 					packets_lost = 0;
-				} else {
-					packets_lost += uC_idx-pkt_idx_;
+				}
+
+				if (abs((int64_t)uC_idx - (int64_t)pkt_idx_) > 1000) // Kind of bad solution
+				{
+					pkt_idx_ = uC_idx;
+					packets_lost = 0;
+					AP_LOG("Greater than 1000, possible uC reset or disconnection")
+				}
+				else if (uC_idx == pkt_idx_)
+				{
+				}
+				else
+				{
+					AP_LOG("Lost packets... Resetting internal index")
+					packets_lost += uC_idx - pkt_idx_;
 					pkt_idx_ = uC_idx;
 				}
 			}
@@ -238,7 +276,6 @@ void ArduPlot::DrawPlots()
 		}
 		ImGui::End();
 	}
-
 }
 
 /*

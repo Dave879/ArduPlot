@@ -17,7 +17,7 @@ using namespace mahi::util;
 class ArduPlot : public Application
 {
 
-private:
+public:
 	// Heatmap
 	// 0  1    2         3    4     5     (6) (7)
 	// ID:TYPE:GRAPHTYPE:NAME:SIZEX:SIZEY:MIN:MAX
@@ -58,7 +58,14 @@ private:
 	USBInput input_stream = USBInput();
 
 	uint64_t pkt_idx_ = 0;
+	uint64_t uC_idx = 0;
 	uint64_t packets_lost = 0;
+
+	uint64_t count = 0;
+
+	double Mb_s = 0;
+	uint64_t B_sum = 0;
+	std::chrono::system_clock::time_point measurement_start_time = std::chrono::system_clock::now();
 
 	std::string data_buffer = "";
 	std::string current_data_packet = "";
@@ -72,7 +79,6 @@ private:
 	void DrawStatWindow();
 	double seconds_since_start = 0;
 
-public:
 	ArduPlot();
 	void update() override;
 };
