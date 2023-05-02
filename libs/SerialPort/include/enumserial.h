@@ -11,11 +11,7 @@
 #include <tchar.h>
 #include "dirent.h"
 
-#elif __APPLE__
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#elif __linux__
+#else
 #include <filesystem>
 #endif
 

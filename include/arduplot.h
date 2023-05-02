@@ -18,6 +18,36 @@ class ArduPlot : public Application
 {
 
 private:
+	// Heatmap
+	// 0  1    2         3    4     5     (6) (7)
+	// ID:TYPE:GRAPHTYPE:NAME:SIZEX:SIZEY:MIN:MAX
+
+	// Line/Bar
+	// 0  1    2         3    (4) (5)
+	// ID:TYPE:GRAPHTYPE:NAME:MIN:MAX
+
+	enum heatmap_tkn_idx_
+	{
+		SIZEX = 4,
+		SIZEY,
+		MINH,
+		MAXH
+	};
+
+	enum line_tkn_idx_
+	{
+		MIN = 4,
+		MAX
+	};
+
+	enum tkn_idx_
+	{
+		ID,
+		TYPE,
+		GRAPHTYPE,
+		NAME,
+	};
+
 	std::vector<std::string> paths;
 	SerialConsole serial_console = SerialConsole("Serial Console");
 	SerialConsole json_console = SerialConsole("Json Console");
@@ -26,6 +56,9 @@ private:
 	double startTime;
 	std::chrono::steady_clock::time_point start_time;
 	USBInput input_stream = USBInput();
+
+	uint64_t pkt_idx_ = 0;
+	uint64_t packets_lost = 0;
 
 	std::string data_buffer = "";
 	std::string current_data_packet = "";
@@ -36,7 +69,8 @@ private:
 	std::vector<iiDGraphData> iid_graphs;
 	void UpdateDataStructures(json &j);
 	void DrawPlots();
-	float seconds_since_start = 0;
+	void DrawStatWindow();
+	double seconds_since_start = 0;
 
 public:
 	ArduPlot();

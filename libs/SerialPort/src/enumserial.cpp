@@ -31,33 +31,10 @@ std::vector<std::string> EnumSerial::EnumSerialPort()
    }
    // close key
    RegCloseKey(hkey);
-#elif __APPLE__
-   root = std::string("/dev/");
-   DIR *dp;
-   struct dirent *dirp;
-   if ((dp = opendir(root.c_str())) == NULL)
-   {
-   }
-   while ((dirp = readdir(dp)) != NULL)
-   {
-      std::string filename(dirp->d_name);
-      if (filename.find(std::string("cu.")) != std::string::npos && filename.find(std::string("BLTH")) == std::string::npos)
-      {
-         paths.push_back(std::string(dirp->d_name));
-         continue;
-      }
-      /*
-      if (filename.find(std::string("tty.")) != std::string::npos filename.find(std::string("BLTH")) != std::string::npos)
-      {
-         paths.push_back(std::string(dirp->d_name));
-         continue;
-      }
-      */
-   }
-   closedir(dp);
-#elif __linux__
+
+#else
    for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/")){
-      if (dir.path().string().find("ACM") != std::string::npos)
+      if (dir.path().string().find("ACM") != std::string::npos || dir.path().string().find("cu.usbmodem") != std::string::npos)
          paths.push_back(dir.path().string().substr(5));
    }
 #endif

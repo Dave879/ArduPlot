@@ -49,6 +49,7 @@ struct iDGraphData
 	GraphType type;
 	ScrollingBuffer buffer;
 	int64_t min = 0, max = 0;
+	bool has_set_min_max = false;
 
 	iDGraphData(std::string name = "Default", GraphType type = GraphType::LINE)
 	{
@@ -63,6 +64,8 @@ struct iiDGraphData
 	std::vector<double> buffer;
 	uint64_t sizex, sizey;
 	int64_t min = 0, max = 0;
+	bool has_set_min_max = false;
+
 	iiDGraphData(std::string name = "Default")
 	{
 		this->graphName = name;

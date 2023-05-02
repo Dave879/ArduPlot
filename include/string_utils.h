@@ -13,5 +13,6 @@ std::vector<std::string> split(std::string s, std::string delimiter)
 		vec.push_back(token);
 		s.erase(0, pos + delimiter.length());
 	}
+	vec.push_back(s);
 	return vec;
 }
