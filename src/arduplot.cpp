@@ -33,13 +33,11 @@ ArduPlot::ArduPlot() //: Application(1200, 500, "ArduPlot")
 
 void ArduPlot::update()
 {
-	/*
+
 	ImGui::DockSpaceOverViewport();
 	input_stream.DrawDataInputPanel();
-	*/
+
 	current_data_packet = input_stream.GetData();
-	AP_LOG("Size::::" << current_data_packet.size())
-	AP_LOG_b(">" << current_data_packet << "<")
 	Mb_s += current_data_packet.size();
 	data_buffer += current_data_packet;
 	std::string pkt = "";
@@ -53,7 +51,7 @@ void ArduPlot::update()
 				json_data = json::parse(pkt);
 				UpdateDataStructures(json_data);
 				pkt_idx_++;
-				//json_console.Add(json_data.dump(4));
+				json_console.Add(json_data.dump(4));
 			}
 			catch (const std::exception &e)
 			{
@@ -67,20 +65,21 @@ void ArduPlot::update()
 	if (measurement_start_time <= std::chrono::system_clock::now())
 	{
 		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
-		Mb_s = Mb_s*8 / 1e+6;
+		Mb_s = Mb_s * 8 / 1e+6;
+		display_Mbps = Mb_s;
 		AP_LOG_g(Mb_s << " Mb/s");
 		Mb_s = 0;
 		AP_LOG_b(count << " cycles");
 		count = 0;
 	}
 	count++;
-	/*
+
 	DrawStatWindow();
 	DrawPlots();
 	json_console.Display();
 	serial_console.Display();
 	seconds_since_start += ImGui::GetIO().DeltaTime;
-	*/
+
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
@@ -109,7 +108,7 @@ void ArduPlot::DrawStatWindow()
 	ImGui::Text("Packets dropped: %llu", packets_lost);
 	ImGui::Text("Microcontroller index: %llu", uC_idx);
 	ImGui::Text("Internal index: %llu", pkt_idx_);
-	ImGui::Text("Throughput: %fMb/s", Mb_s);
+	ImGui::Text("Throughput: %fMb/s", display_Mbps);
 
 	ImGui::End();
 }
@@ -195,10 +194,14 @@ void ArduPlot::UpdateDataStructures(json &j)
 			else if (tkn.at(tkn_idx_::TYPE) == "s")
 			{
 				std::string contents = value.dump().c_str();
+				AP_LOG(contents)
 				contents = contents.substr(1, contents.length() - 2);
-				contents.replace(contents.find("\\"), 2, "\n");
+				if (contents.find("\\n") != std::string::npos)
+				{
+					contents.replace(contents.find("\\"), 2, "\n");
+				}
+				
 				serial_console.Add(contents.c_str());
-				contents = "";
 			}
 			else if (tkn.at(tkn_idx_::TYPE) == "i")
 			{

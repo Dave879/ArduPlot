@@ -64,6 +64,7 @@ public:
 	uint64_t count = 0;
 
 	double Mb_s = 0;
+	double display_Mbps = 0;
 	uint64_t B_sum = 0;
 	std::chrono::system_clock::time_point measurement_start_time = std::chrono::system_clock::now();
 

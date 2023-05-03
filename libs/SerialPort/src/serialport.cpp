@@ -27,12 +27,13 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
 
    // Open port, checking for errors
 
-   sfd = open(portPath, O_RDWR);
+   sfd = open(portPath, O_RDWR | O_NOCTTY);
    if (sfd == -1)
    {
       printf("Unable to open serial port: %s at baud rate: %d\n", portPath, baudRate);
       return sfd;
    }
+   fcntl(sfd, F_SETFL, FNDELAY);
 
    // Configure i/o baud rate settings
    struct termios options;
@@ -66,26 +67,27 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
    options.c_cflag &= ~CRTSCTS;       // Disable RTS/CTS hardware flow control (most common)
    options.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
 
-   options.c_lflag &= ~ICANON;
-   options.c_lflag &= ~ECHO;                                                        // Disable echo
-   options.c_lflag &= ~ECHOE;                                                       // Disable erasure
-   options.c_lflag &= ~ECHONL;                                                      // Disable new-line echo
-   options.c_lflag &= ~ISIG;                                                        // Disable interpretation of INTR, QUIT and SUSP
+
+   options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG | ECHONL);
+   //options.c_lflag &= ~ICANON;
+   //options.c_lflag &= ~ECHO;                                                        // Disable echo
+   //options.c_lflag &= ~ECHOE;                                                       // Disable erasure
+   //options.c_lflag &= ~ISIG;                                                        // Disable interpretation of INTR, QUIT and SUSP
+   //options.c_lflag &= ~ECHONL;                                                      // Disable new-line echo
    options.c_iflag &= ~(IXON | IXOFF | IXANY);                                      // Turn off s/w flow ctrl
    options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL); // Disable any special handling of received bytes
 
+   // When the OPOST option is disabled, all other option bits in c_oflag are ignored.
    options.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
-   options.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
+
+   //options.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
                           // tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
                           // tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
 
    cfsetispeed(&options, baudRate);
    cfsetospeed(&options, baudRate);
 
-   // Apply settings
-   // TCSANOW vs TCSAFLUSH? Was using TCSAFLUSH; settings source above
-   // uses TCSANOW.
-   if (tcsetattr(sfd, TCSANOW, &options) != 0)
+   if (tcsetattr(sfd, TCSAFLUSH, &options) != 0)
    {
       printf("Error setting serial port attributes.\n");
       close(sfd);
