@@ -5,8 +5,10 @@
 #include <string>
 #include <atomic>
 #include <thread>
-#include <json.hpp>
+#define __OPTIMIZE__ 1
+#include <simdjson.h>
 
+#include "string_utils.h"
 #include "usb_input.h"
 #include "utilities.h"
 #include "log.h"
@@ -48,6 +50,11 @@ public:
 		NAME,
 	};
 
+	simdjson::padded_string json_data;
+	simdjson::dom::parser parser;
+	simdjson::ondemand::document doc;
+	simdjson::ondemand::value val;
+
 	std::vector<std::string> paths;
 	SerialConsole serial_console = SerialConsole("Serial Console");
 	SerialConsole json_console = SerialConsole("Json Console");
@@ -72,10 +79,9 @@ public:
 	std::string current_data_packet = "";
 
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
-	json json_data;
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
-	void UpdateDataStructures(json &j);
+	void UpdateDataStructures(simdjson::dom::object &j);
 	void DrawPlots();
 	void DrawStatWindow();
 	double seconds_since_start = 0;
