@@ -1,18 +1,5 @@
-#include <Mahi/Gui.hpp>
-#include <Mahi/Util.hpp>
-#include <vector>
-#include <string>
-#include <thread>
-#include <mutex>
-#include <json.hpp>
-#include <imgui.h>
 
 #include "arduplot.h"
-#include "utilities.h"
-#include "usb_input.h"
-#include "string_utils.h"
-
-#include "log.h"
 
 using namespace mahi::gui;
 using namespace mahi::util;
@@ -33,11 +20,15 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 
 void ArduPlot::update()
 {
-	ImGui::DockSpaceOverViewport();
-	input_stream.DrawDataInputPanel();
+
+		ImGui::DockSpaceOverViewport();
+		input_stream.DrawDataInputPanel();
+
 
 	current_data_packet = input_stream.GetData();
+	Mb_s += current_data_packet.size();
 	data_buffer += current_data_packet;
+
 	std::string pkt = "";
 	do
 	{
@@ -46,10 +37,12 @@ void ArduPlot::update()
 		{
 			try
 			{
-				json_data = json::parse(pkt);
-				UpdateDataStructures(json_data);
+				simdjson::padded_string json_data(pkt);
+				simdjson::dom::object obj;
+				auto error = parser.parse(json_data).get(obj);
+				UpdateDataStructures(obj);
 				pkt_idx_++;
-				json_console.Add(json_data.dump(4));
+				json_console.Add(pkt + "\n");
 			}
 			catch (const std::exception &e)
 			{
@@ -59,44 +52,115 @@ void ArduPlot::update()
 			}
 		}
 	} while (pkt != "");
-	DrawPlots();
-	DrawStatWindow();
-	json_console.Display();
-	serial_console.Display();
-	seconds_since_start += ImGui::GetIO().DeltaTime;
+	if (measurement_start_time <= std::chrono::system_clock::now())
+	{
+		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+		Mb_s = Mb_s * 8 / 1e+6;
+		display_Mbps = Mb_s;
+		AP_LOG_g(Mb_s << " Mb/s");
+		Mb_s = 0;
+		AP_LOG_b(count << " cycles");
+		count = 0;
+	}
+	count++;
+
+		DrawStatWindow();
+		DrawPlots();
+		json_console.Display();
+		serial_console.Display();
+		seconds_since_start += ImGui::GetIO().DeltaTime;
+
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 {
-	int64_t found_opening = -100;
-	for (uint64_t i = 0; i < data_buffer.length(); i++)
+	const int32_t found_opening = data_buffer.find('{'), found_closing = data_buffer.find('}', found_opening);
+	if (found_opening != std::string::npos && found_closing != std::string::npos)
 	{
-		if (data_buffer.at(i) == '{')
-		{
-			found_opening = i;
-		}
-
-		if (data_buffer.at(i) == '}' && found_opening >= 0)
-		{
-			std::string packet = data_buffer.substr(found_opening, (i - found_opening) + 1);
-			data_buffer = data_buffer.substr(i + 1);
-			return packet;
-		}
+		std::string packet = data_buffer.substr(found_opening, (found_closing - found_opening) + 1);
+		data_buffer = data_buffer.substr(found_closing + 1);
+		return packet;
 	}
 	return "";
 }
 
-void ArduPlot::DrawStatWindow(){
+void ArduPlot::DrawStatWindow()
+{
 	ImGui::Begin("Stats");
 	ImGui::Text("Packets dropped: %llu", packets_lost);
+	ImGui::Text("Microcontroller index: %llu", uC_idx);
+	ImGui::Text("Internal index: %llu", pkt_idx_);
+	ImGui::Text("Throughput: %fMb/s", display_Mbps);
+
 	ImGui::End();
 }
-
-void ArduPlot::UpdateDataStructures(json &j)
+void recursive_print_json(simdjson::ondemand::value element)
 {
-	for (auto &[key, value] : j.items())
+	bool add_comma;
+	switch (element.type())
 	{
-		std::vector<std::string> tkn = split(key, ":");
+	case simdjson::ondemand::json_type::array:
+		std::cout << "[";
+		add_comma = false;
+		for (auto child : element.get_array())
+		{
+			if (add_comma)
+			{
+				std::cout << ",";
+			}
+			// We need the call to value() to get
+			// an ondemand::value type.
+			recursive_print_json(child.value());
+			add_comma = true;
+		}
+		std::cout << "]";
+		break;
+	case simdjson::ondemand::json_type::object:
+		std::cout << "{";
+		add_comma = false;
+		for (auto field : element.get_object())
+		{
+			if (add_comma)
+			{
+				std::cout << ",";
+			}
+			// key() returns the key as it appears in the raw
+			// JSON document, if we want the unescaped key,
+			// we should do field.unescaped_key().
+			std::cout << "\"" << field.key() << "\": ";
+			recursive_print_json(field.value());
+			add_comma = true;
+		}
+		std::cout << "}\n";
+		break;
+	case simdjson::ondemand::json_type::number:
+		// assume it fits in a double
+		std::cout << element.get_double();
+		break;
+	case simdjson::ondemand::json_type::string:
+		// get_string() would return escaped string, but
+		// we are happy with unescaped string.
+		std::cout << "\"" << element.get_raw_json_string() << "\"";
+		break;
+	case simdjson::ondemand::json_type::boolean:
+		std::cout << element.get_bool();
+		break;
+	case simdjson::ondemand::json_type::null:
+		// We check that the value is indeed null
+		// otherwise: an error is thrown.
+		if (element.is_null())
+		{
+			std::cout << "null";
+		}
+		break;
+	}
+}
+
+void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
+{
+	for (auto [key, value] : j)
+	{
+		std::vector<std::string> tkn = split(std::string(key), "£");
 		try
 		{
 			if (tkn.at(tkn_idx_::TYPE) == "n") // If graph has numerical data
@@ -108,7 +172,7 @@ void ArduPlot::UpdateDataStructures(json &j)
 					try
 					{
 						id_graphs.at(graphID).graphName = graphName;
-						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, std::stof(value.dump()));
+						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
 						if (tkn.size() == 6)
 						{
 							id_graphs.at(graphID).min = std::stoi(tkn.at(line_tkn_idx_::MIN), nullptr);
@@ -121,7 +185,7 @@ void ArduPlot::UpdateDataStructures(json &j)
 						iDGraphData gd(graphName, GraphType::LINE);
 						if (tkn.at(tkn_idx_::GRAPHTYPE) == "b")
 							gd.type = GraphType::BAR;
-						gd.buffer.AddPoint(seconds_since_start, std::stof(value.dump()));
+						gd.buffer.AddPoint(seconds_since_start, double(value));
 						id_graphs.push_back(gd);
 						AP_LOG_b("Created new graph")
 					}
@@ -142,9 +206,11 @@ void ArduPlot::UpdateDataStructures(json &j)
 							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH), nullptr);
 							iid_graphs.at(graphID).has_set_min_max = true;
 						}
-						for (size_t i = 0; i < iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey; i++)
+						size_t i = 0;
+						for (auto element : value.get_array())
 						{
-							iid_graphs.at(graphID).buffer.push_back(std::stod(value.at(i).dump()));
+							iid_graphs.at(graphID).buffer.at(i) = double(element);
+							i++;
 						}
 					}
 					catch (const std::exception &e)
@@ -160,10 +226,13 @@ void ArduPlot::UpdateDataStructures(json &j)
 							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH), nullptr, 10);
 							iid_graphs.at(graphID).has_set_min_max = true;
 						}
-						for (size_t i = 0; i < iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey; i++)
+						size_t i = 0;
+						for (auto element : value.get_array())
 						{
-							iid_graphs.at(graphID).buffer.push_back(std::stod(value.at(i).dump()));
+							iid_graphs.at(graphID).buffer.push_back(double(element));
+							i++;
 						}
+
 						AP_LOG_b("Created new heatmap");
 						AP_LOG("X:" << iid_graphs.at(graphID).sizex << "Y:" << iid_graphs.at(graphID).sizey << "min:" << iid_graphs.at(graphID).min << "max:" << iid_graphs.at(graphID).max)
 					}
@@ -171,19 +240,36 @@ void ArduPlot::UpdateDataStructures(json &j)
 			}
 			else if (tkn.at(tkn_idx_::TYPE) == "s")
 			{
-				std::string contents = value.dump().c_str();
-				contents = contents.substr(1, contents.length() - 2);
-				contents.replace(contents.find("\\"), 2, "\n");
+				std::string_view val = value;
+				std::string contents(val);
+				if (contents.find("\\n") != std::string::npos)
+				{
+					contents.replace(contents.find("\\"), 2, "\n");
+				}
 				serial_console.Add(contents.c_str());
-				contents = "";
-			} else if(tkn.at(tkn_idx_::TYPE) == "i"){
-				uint64_t uC_idx = std::stoul(value.dump()); // Will be always equal or greater than local pkt_idx_
-				if (abs((int64_t)uC_idx-(int64_t)pkt_idx_) > 500) // Kind of bad solution
+			}
+			else if (tkn.at(tkn_idx_::TYPE) == "i")
+			{
+				uC_idx = value;
+				if (uC_idx < pkt_idx_) // Microcontroller reflashed/rebooted/crashed/power was unplugged
 				{
 					pkt_idx_ = uC_idx;
 					packets_lost = 0;
-				} else {
-					packets_lost += uC_idx-pkt_idx_;
+				}
+
+				if (abs((int64_t)uC_idx - (int64_t)pkt_idx_) > 1000) // Kind of bad solution
+				{
+					pkt_idx_ = uC_idx;
+					packets_lost = 0;
+					AP_LOG("Greater than 1000, possible uC reset or disconnection")
+				}
+				else if (uC_idx == pkt_idx_)
+				{
+				}
+				else
+				{
+					AP_LOG("Lost packets... Resetting internal index")
+					packets_lost += uC_idx - pkt_idx_;
 					pkt_idx_ = uC_idx;
 				}
 			}
@@ -238,7 +324,6 @@ void ArduPlot::DrawPlots()
 		}
 		ImGui::End();
 	}
-
 }
 
 /*

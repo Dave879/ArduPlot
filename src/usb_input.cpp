@@ -122,26 +122,17 @@ std::string USBInput::GetData()
 
 uint32_t USBInput::Read(int fd, char *buf)
 {
-	uint32_t bytes_available;
-	int n;
-	ioctl(fd, FIONREAD, &bytes_available);
-	if (bytes_available >= CHAR_BUF_SIZE)
-	{
-		n = read(fd, buf, CHAR_BUF_SIZE);
-		bytes_available = CHAR_BUF_SIZE;
-	}
-	else
-	{
-		n = read(fd, buf, bytes_available);
-	}
-
+	int32_t n = read(fd, buf, CHAR_BUF_SIZE);
 	if (n == -1)
-		return 0;							// couldn't read
-	buf[bytes_available + 1] = '\0'; // null terminate the string
-	return bytes_available;
+	{
+		return 0; // couldn't read
+	}
+	buf[n + 1] = '\0'; // null terminate the string
+	return n;
 }
 
-bool USBInput::IsConnected(){
+bool USBInput::IsConnected()
+{
 	return connected_to_device;
 }
 

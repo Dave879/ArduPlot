@@ -1,6 +1,5 @@
 
-# This document describes the json key name that will be used by the microcontroller to ArduPlot
-
+# This document describes the json key name that will be used by the microcontroller to ArduPlot *OLD!!! NEED TO CHANGE*
 ## Features needed
 
 1. Choose type (int, float, bool, string) + arrays
