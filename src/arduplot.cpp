@@ -169,7 +169,6 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				{
 					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID), nullptr);
 					std::string graphName = tkn.at(tkn_idx_::NAME);
-					AP_LOG(graphName);
 					try
 					{
 						id_graphs.at(graphID).graphName = graphName;
