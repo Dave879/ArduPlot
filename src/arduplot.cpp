@@ -21,9 +21,8 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 void ArduPlot::update()
 {
 
-		ImGui::DockSpaceOverViewport();
-		input_stream.DrawDataInputPanel();
-
+	ImGui::DockSpaceOverViewport();
+	input_stream.DrawDataInputPanel();
 
 	current_data_packet = input_stream.GetData();
 	Mb_s += current_data_packet.size();
@@ -57,19 +56,17 @@ void ArduPlot::update()
 		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
 		Mb_s = Mb_s * 8 / 1e+6;
 		display_Mbps = Mb_s;
-		AP_LOG_g(Mb_s << " Mb/s");
+		display_count = count;
 		Mb_s = 0;
-		AP_LOG_b(count << " cycles");
 		count = 0;
 	}
 	count++;
 
-		DrawStatWindow();
-		DrawPlots();
-		json_console.Display();
-		serial_console.Display();
-		seconds_since_start += ImGui::GetIO().DeltaTime;
-
+	DrawStatWindow();
+	DrawPlots();
+	json_console.Display();
+	serial_console.Display();
+	seconds_since_start += ImGui::GetIO().DeltaTime;
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
@@ -88,72 +85,18 @@ void ArduPlot::DrawStatWindow()
 {
 	ImGui::Begin("Stats");
 	ImGui::Text("Packets dropped: %llu", packets_lost);
-	ImGui::Text("Microcontroller index: %llu", uC_idx);
-	ImGui::Text("Internal index: %llu", pkt_idx_);
-	ImGui::Text("Throughput: %fMb/s", display_Mbps);
+	if (ImGui::BeginTable("Index", 2))
+	{
+		ImGui::TableNextColumn();
+		ImGui::Text("µC index: %llu", uC_idx);
+		ImGui::TableNextColumn();
+		ImGui::Text("Internal index: %llu", pkt_idx_);
+		ImGui::EndTable();
+	}
+	ImGui::Text("Throughput: %.3f Mb/s", display_Mbps);
+	ImGui::Text("Cycles: %llu", display_count);
 
 	ImGui::End();
-}
-void recursive_print_json(simdjson::ondemand::value element)
-{
-	bool add_comma;
-	switch (element.type())
-	{
-	case simdjson::ondemand::json_type::array:
-		std::cout << "[";
-		add_comma = false;
-		for (auto child : element.get_array())
-		{
-			if (add_comma)
-			{
-				std::cout << ",";
-			}
-			// We need the call to value() to get
-			// an ondemand::value type.
-			recursive_print_json(child.value());
-			add_comma = true;
-		}
-		std::cout << "]";
-		break;
-	case simdjson::ondemand::json_type::object:
-		std::cout << "{";
-		add_comma = false;
-		for (auto field : element.get_object())
-		{
-			if (add_comma)
-			{
-				std::cout << ",";
-			}
-			// key() returns the key as it appears in the raw
-			// JSON document, if we want the unescaped key,
-			// we should do field.unescaped_key().
-			std::cout << "\"" << field.key() << "\": ";
-			recursive_print_json(field.value());
-			add_comma = true;
-		}
-		std::cout << "}\n";
-		break;
-	case simdjson::ondemand::json_type::number:
-		// assume it fits in a double
-		std::cout << element.get_double();
-		break;
-	case simdjson::ondemand::json_type::string:
-		// get_string() would return escaped string, but
-		// we are happy with unescaped string.
-		std::cout << "\"" << element.get_raw_json_string() << "\"";
-		break;
-	case simdjson::ondemand::json_type::boolean:
-		std::cout << element.get_bool();
-		break;
-	case simdjson::ondemand::json_type::null:
-		// We check that the value is indeed null
-		// otherwise: an error is thrown.
-		if (element.is_null())
-		{
-			std::cout << "null";
-		}
-		break;
-	}
 }
 
 void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)

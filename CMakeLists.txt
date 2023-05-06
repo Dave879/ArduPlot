@@ -17,6 +17,7 @@ FetchContent_Declare(mahi-gui GIT_REPOSITORY https://github.com/mahilab/mahi-gui
 FetchContent_MakeAvailable(mahi-gui)
 
 add_subdirectory(libs/SerialPort)
+add_subdirectory(libs/json)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
 	./
@@ -25,5 +26,5 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	libs/json/
 )
 
-target_link_libraries(${PROJECT_NAME} mahi::gui SerialPort)
+target_link_libraries(${PROJECT_NAME} mahi::gui SerialPort json)
 

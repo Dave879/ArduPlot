@@ -69,6 +69,7 @@ public:
 	uint64_t packets_lost = 0;
 
 	uint64_t count = 0;
+	uint64_t display_count = 0;
 
 	double Mb_s = 0;
 	double display_Mbps = 0;
