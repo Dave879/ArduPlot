@@ -130,7 +130,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 							gd.type = GraphType::BAR;
 						gd.buffer.AddPoint(seconds_since_start, double(value));
 						id_graphs.push_back(gd);
-						AP_LOG_b("Created new graph")
+						AP_LOG_b("Created new graph: " << id_graphs.at(graphID).graphName)
 					}
 				}
 				else if (tkn.at(tkn_idx_::GRAPHTYPE) == "h") // Update data structure for heatmap
@@ -139,7 +139,6 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
-
 						iid_graphs.at(graphID).graphName = graphName;
 						iid_graphs.at(graphID).sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX), nullptr);
 						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY), nullptr);
@@ -160,13 +159,13 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 					{
 						iiDGraphData gd(graphName);
 						iid_graphs.push_back(gd);
-						iid_graphs.at(graphID).sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX), nullptr, 10);
-						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY), nullptr, 10);
+						iid_graphs.at(graphID).sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX));
+						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
 
 						if (tkn.size() == 8)
 						{
-							iid_graphs.at(graphID).min = std::stoi(tkn.at(heatmap_tkn_idx_::MINH), nullptr, 10);
-							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH), nullptr, 10);
+							iid_graphs.at(graphID).min = std::stof(tkn.at(heatmap_tkn_idx_::MINH));
+							iid_graphs.at(graphID).max = std::stof(tkn.at(heatmap_tkn_idx_::MAXH));
 							iid_graphs.at(graphID).has_set_min_max = true;
 						}
 						size_t i = 0;
@@ -176,8 +175,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 							i++;
 						}
 
-						AP_LOG_b("Created new heatmap");
-						AP_LOG("X:" << iid_graphs.at(graphID).sizex << "Y:" << iid_graphs.at(graphID).sizey << "min:" << iid_graphs.at(graphID).min << "max:" << iid_graphs.at(graphID).max)
+						AP_LOG_b("Created new heatmap: " << iid_graphs.at(graphID).graphName);
 					}
 				}
 			}
@@ -255,16 +253,16 @@ void ArduPlot::DrawPlots()
 	{
 		ImGui::Begin(iid_graphs.at(i).graphName.c_str());
 
-		ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
+		ImGui::DragFloatRange2("Min / Max", &iid_graphs.at(i).min, &iid_graphs.at(i).max, 0.01f, -1000, 1000);
 
-		static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
-		ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
-		ImPlot::SetNextPlotLimitsY(-10, 4000);
-		if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
+		ImPlot::PushColormap(ImPlotColormap_Viridis);
+		if (ImPlot::BeginPlot("##Heatmap1", NULL, NULL, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y), ImPlotFlags_NoLegend | ImPlotFlags_NoMousePos, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Invert))
 		{
-			ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
+			ImPlot::PlotHeatmap("heat", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max);
 			ImPlot::EndPlot();
 		}
+		ImPlot::PopColormap();
+
 		ImGui::End();
 	}
 }

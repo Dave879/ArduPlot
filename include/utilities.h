@@ -63,7 +63,7 @@ struct iiDGraphData
 	std::string graphName = "";
 	std::vector<double> buffer;
 	uint64_t sizex, sizey;
-	int64_t min = 0, max = 0;
+	float min = 0, max = 0;
 	bool has_set_min_max = false;
 
 	iiDGraphData(std::string name = "Default")
