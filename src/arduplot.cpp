@@ -21,11 +21,10 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 void ArduPlot::update()
 {
 
-	GetAndEvaluateInputData(); ////////////////////////////////////////////////////////////////////////// BAAAD
 	ImGui::DockSpaceOverViewport();
 	input_stream.DrawDataInputPanel();
+	GetAndEvaluateInputData();
 
-	GetAndEvaluateInputData(); ////////////////////////////////////////////////////////////////////////// BAAAD
 	if (measurement_start_time <= std::chrono::system_clock::now())
 	{
 		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
@@ -42,14 +41,21 @@ void ArduPlot::update()
 	json_console.Display();
 	serial_console.Display();
 	seconds_since_start += ImGui::GetIO().DeltaTime;
-	GetAndEvaluateInputData(); ////////////////////////////////////////////////////////////////////////// BAAAD
 }
 
 void ArduPlot::GetAndEvaluateInputData()
 {
-	current_data_packet = input_stream.GetData();
-	Mb_s += current_data_packet.size();
-	data_buffer += current_data_packet;
+	if (input_stream.IsConnected())
+	{
+		current_data_packet = input_stream.GetData();
+		Mb_s += current_data_packet.size();
+		data_buffer += current_data_packet;
+	} else{
+		current_data_packet = "";
+		data_buffer = "";
+		Mb_s = 0;
+	}
+	
 
 	std::string pkt = "";
 	do
@@ -120,7 +126,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			{
 				if (tkn.at(tkn_idx_::GRAPHTYPE) == "l" || tkn.at(tkn_idx_::GRAPHTYPE) == "b") // Update data structure for line or bar graph
 				{
-					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID), nullptr);
+					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
@@ -128,8 +134,8 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
 						if (tkn.size() == 6)
 						{
-							id_graphs.at(graphID).min = std::stoi(tkn.at(line_tkn_idx_::MIN), nullptr);
-							id_graphs.at(graphID).max = std::stoi(tkn.at(line_tkn_idx_::MAX), nullptr);
+							id_graphs.at(graphID).min = std::stoi(tkn.at(line_tkn_idx_::MIN));
+							id_graphs.at(graphID).max = std::stoi(tkn.at(line_tkn_idx_::MAX));
 							id_graphs.at(graphID).has_set_min_max = true;
 						}
 					}
@@ -145,17 +151,17 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				}
 				else if (tkn.at(tkn_idx_::GRAPHTYPE) == "h") // Update data structure for heatmap
 				{
-					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID), nullptr);
+					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
 						iid_graphs.at(graphID).graphName = graphName;
-						iid_graphs.at(graphID).sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX), nullptr);
-						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY), nullptr);
+						iid_graphs.at(graphID).sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX));
+						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
 						if (tkn.size() == 8)
 						{
-							iid_graphs.at(graphID).min = std::stoi(tkn.at(heatmap_tkn_idx_::MINH), nullptr);
-							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH), nullptr);
+							iid_graphs.at(graphID).min = std::stoi(tkn.at(heatmap_tkn_idx_::MINH));
+							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH));
 							iid_graphs.at(graphID).has_set_min_max = true;
 						}
 						size_t i = 0;
@@ -193,7 +199,6 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			{
 				std::string_view val = value;
 				std::string contents(val);
-				AP_LOG(val)
 				if (contents.find("\\n") != std::string::npos)
 				{
 					contents.replace(contents.find("\\"), 2, "\n");
@@ -223,6 +228,20 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 					AP_LOG("Lost packets... Resetting internal index")
 					packets_lost += uC_idx - pkt_idx_;
 					pkt_idx_ = uC_idx;
+				}
+			}
+			else if (tkn.at(tkn_idx_::TYPE) == "m")
+			{
+				uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
+				std::string_view val = value;
+				std::string contents(val);
+				try
+				{
+					msg_box.at(graphID) = contents;
+				}
+				catch (const std::exception &e)
+				{
+					msg_box.push_back(contents);
 				}
 			}
 		}
@@ -269,13 +288,24 @@ void ArduPlot::DrawPlots()
 		ImPlot::PushColormap(ImPlotColormap_Viridis);
 		if (ImPlot::BeginPlot("##Heatmap1", NULL, NULL, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y), ImPlotFlags_NoLegend | ImPlotFlags_NoMousePos, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Invert))
 		{
-			ImPlot::PlotHeatmap("heat", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max);
+			ImPlot::PlotHeatmap("heat", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max, "%.0f");
 			ImPlot::EndPlot();
 		}
 		ImPlot::PopColormap();
 
 		ImGui::End();
 	}
+
+	if (msg_box.size() > 0)
+	{
+		ImGui::Begin("Repeated Messages");
+		for (size_t i = 0; i < msg_box.size(); i++)
+		{
+			ImGui::Text(msg_box.at(i).c_str());
+		}
+		ImGui::End();
+	}
+	
 }
 
 /*

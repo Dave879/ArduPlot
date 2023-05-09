@@ -3,7 +3,7 @@
 #include <vector>
 #include <Mahi/Gui.hpp>
 
-//#define AP_LOG(x) std::cout <<  __FILE__  << "(" << __LINE__ << ") " << x << std::endl;
+// #define AP_LOG(x) std::cout <<  __FILE__  << "(" << __LINE__ << ") " << x << std::endl;
 
 const std::string red("\033[0;31m");
 const std::string green("\033[0;32m");
@@ -16,10 +16,10 @@ const std::string reset("\033[0m");
 #define AP_LOG_b(x) std::cout << blue << x << reset << std::endl;
 
 #define START_TIMER std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-#define END_TIMER                                                                 \
+#define END_TIMER                                                                \
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now(); \
 	std::cout << "ΔT = " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count() << "[ns] " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs] " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
-#define END_TIMER_MICROSECONDS                                                    \
+#define END_TIMER_MICROSECONDS                                                   \
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now(); \
 	std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << std::endl;
 
@@ -77,3 +77,4 @@ struct sGraphData
 	std::string graphName = "";
 	ScrollingBuffer buffer;
 };
+

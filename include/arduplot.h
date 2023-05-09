@@ -84,6 +84,7 @@ public:
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
+	std::vector<std::string> msg_box;
 	void UpdateDataStructures(simdjson::dom::object &j);
 	void DrawPlots();
 	void DrawStatWindow();
