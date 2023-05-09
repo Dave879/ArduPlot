@@ -21,36 +21,11 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 void ArduPlot::update()
 {
 
+	GetAndEvaluateInputData(); ////////////////////////////////////////////////////////////////////////// BAAAD
 	ImGui::DockSpaceOverViewport();
 	input_stream.DrawDataInputPanel();
 
-	current_data_packet = input_stream.GetData();
-	Mb_s += current_data_packet.size();
-	data_buffer += current_data_packet;
-
-	std::string pkt = "";
-	do
-	{
-		pkt = GetFirstJsonPacketInBuffer(data_buffer);
-		if (pkt != "")
-		{
-			try
-			{
-				simdjson::padded_string json_data(pkt);
-				simdjson::dom::object obj;
-				auto error = parser.parse(json_data).get(obj);
-				UpdateDataStructures(obj);
-				pkt_idx_++;
-				json_console.Add(pkt + "\n");
-			}
-			catch (const std::exception &e)
-			{
-				AP_LOG_r(pkt);
-				AP_LOG_r("Exception when parsing json");
-				AP_LOG_r(e.what());
-			}
-		}
-	} while (pkt != "");
+	GetAndEvaluateInputData(); ////////////////////////////////////////////////////////////////////////// BAAAD
 	if (measurement_start_time <= std::chrono::system_clock::now())
 	{
 		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
@@ -67,6 +42,41 @@ void ArduPlot::update()
 	json_console.Display();
 	serial_console.Display();
 	seconds_since_start += ImGui::GetIO().DeltaTime;
+	GetAndEvaluateInputData(); ////////////////////////////////////////////////////////////////////////// BAAAD
+}
+
+void ArduPlot::GetAndEvaluateInputData()
+{
+	current_data_packet = input_stream.GetData();
+	Mb_s += current_data_packet.size();
+	data_buffer += current_data_packet;
+
+	std::string pkt = "";
+	do
+	{
+		pkt = GetFirstJsonPacketInBuffer(data_buffer);
+		if (pkt != "")
+		{
+			try
+			{
+				simdjson::padded_string json_data(pkt);
+				simdjson::dom::object obj;
+				auto error = parser.parse(json_data).get(obj);
+				if (error == simdjson::error_code::SUCCESS)
+				{
+					UpdateDataStructures(obj);
+				}
+				pkt_idx_++;
+				json_console.Add(pkt + "\n");
+			}
+			catch (const std::exception &e)
+			{
+				AP_LOG_r(pkt);
+				AP_LOG_r("Exception when parsing json");
+				AP_LOG_r(e.what());
+			}
+		}
+	} while (pkt != "");
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
@@ -183,6 +193,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			{
 				std::string_view val = value;
 				std::string contents(val);
+				AP_LOG(val)
 				if (contents.find("\\n") != std::string::npos)
 				{
 					contents.replace(contents.find("\\"), 2, "\n");

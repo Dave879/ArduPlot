@@ -79,6 +79,8 @@ public:
 	std::string data_buffer = "";
 	std::string current_data_packet = "";
 
+	void GetAndEvaluateInputData();
+
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
