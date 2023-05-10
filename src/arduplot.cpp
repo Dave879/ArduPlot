@@ -20,70 +20,103 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 
 void ArduPlot::update()
 {
-
+	//AP_LOG("Render loop started");
 	ImGui::DockSpaceOverViewport();
+	//AP_LOG("1");
 	input_stream.DrawDataInputPanel();
-	
-	GetAndEvaluateInputData();
-
-	if (measurement_start_time <= std::chrono::system_clock::now())
+	//AP_LOG("2");
+	if (input_stream.IsConnected() && !read_thread_started)
 	{
-		measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
-		Mb_s = Mb_s * 8 / 1e+6;
-		display_Mbps = Mb_s;
-		display_count = count;
-		Mb_s = 0;
-		count = 0;
+		AP_LOG("Spawned thread")
+		read_thread = std::thread(&ArduPlot::ReadThread, this);
+		read_thread_started = true;
 	}
-	count++;
+	if (!input_stream.IsConnected() && read_thread_started)
+	{
+		AP_LOG("Try to join read thread...");
+		read_thread.join();
+		AP_LOG("Joined!");
+	}
 
+	//AP_LOG("3");
+	//mtx.lock();
+	//AP_LOG("4");
 	DrawStatWindow();
+	//AP_LOG("5");
 	DrawPlots();
+	//AP_LOG("6");
 	json_console.Display();
+	//AP_LOG("7");
 	serial_console.Display();
+	//AP_LOG("8");
+	//mtx.unlock();
+	//AP_LOG("9");
 	seconds_since_start += ImGui::GetIO().DeltaTime;
+	//AP_LOG("Render loop finished");
 }
 
-void ArduPlot::GetAndEvaluateInputData()
+void ArduPlot::ReadThread()
 {
-	if (input_stream.IsConnected())
+	AP_LOG("Read thread started")
+	measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+
+	while (input_stream.IsConnected())
 	{
 		current_data_packet = input_stream.GetData();
 		Mb_s += current_data_packet.size();
 		data_buffer += current_data_packet;
-	} else{
+		if (current_data_packet.size() > 0)
+		{
+			AP_LOG(current_data_packet.size());
+		}
+
+		std::string pkt = "";
+		do
+		{
+			
+			pkt = GetFirstJsonPacketInBuffer(data_buffer);
+			if (pkt != "")
+			{
+				AP_LOG(pkt)
+				try
+				{
+					simdjson::padded_string json_data(pkt);
+					simdjson::dom::object obj;
+					auto error = parser.parse(json_data).get(obj);
+					if (error == simdjson::error_code::SUCCESS)
+					{
+						AP_LOG("UpdateDataStructures calleds")
+						UpdateDataStructures(obj);
+					} else{
+						AP_LOG_r(error)
+					}
+					pkt_idx_++;
+					json_console.Add(pkt + "\n");
+				}
+				catch (const std::exception &e)
+				{
+					AP_LOG_r(pkt);
+					AP_LOG_r("Exception when parsing json");
+					AP_LOG_r(e.what());
+				}
+			}
+
+			if (measurement_start_time <= std::chrono::system_clock::now())
+			{
+				measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+				Mb_s = Mb_s * 8 / 1e+6;
+				display_Mbps = Mb_s;
+				display_count = count;
+				Mb_s = 0;
+				count = 0;
+			}
+			count++;
+		} while (pkt != "");
 		current_data_packet = "";
 		data_buffer = "";
 		Mb_s = 0;
 	}
-	
-
-	std::string pkt = "";
-	do
-	{
-		pkt = GetFirstJsonPacketInBuffer(data_buffer);
-		if (pkt != "")
-		{
-			try
-			{
-				simdjson::padded_string json_data(pkt);
-				simdjson::dom::object obj;
-				auto error = parser.parse(json_data).get(obj);
-				if (error == simdjson::error_code::SUCCESS)
-				{
-					UpdateDataStructures(obj);
-				}
-				pkt_idx_++;
-				json_console.Add(pkt + "\n");
-			}
-			catch (const std::exception &e)
-			{
-				AP_LOG_r(pkt);
-				AP_LOG_r("Exception when parsing json");
-				AP_LOG_r(e.what());
-			}
-		}
-	} while (pkt != "");
+	AP_LOG("Thread closed");
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
@@ -306,7 +339,6 @@ void ArduPlot::DrawPlots()
 		}
 		ImGui::End();
 	}
-	
 }
 
 /*
