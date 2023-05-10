@@ -16,7 +16,7 @@ USBInput::~USBInput()
 void USBInput::DrawDataInputPanel()
 {
 	ImGui::Begin("USB input");
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 	paths = ScanForAvailableBoards();
 	if (paths.size() == 0)
 	{
@@ -64,7 +64,6 @@ void USBInput::DrawDataInputPanel()
 		}
 		ImGui::EndCombo();
 	}
-	ImGui::SameLine();
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 
 	if (ImGui::Button(!connected_to_device ? "Connect" : "Disconnect", ImGui::GetContentRegionAvail()))
@@ -74,6 +73,7 @@ void USBInput::DrawDataInputPanel()
 			pressed_disconnect = false;
 			if (ConnectToUSB(current_item) == 0)
 				connected_to_device = false;
+			
 		}
 		else
 		{

@@ -23,6 +23,7 @@ void ArduPlot::update()
 
 	ImGui::DockSpaceOverViewport();
 	input_stream.DrawDataInputPanel();
+	
 	GetAndEvaluateInputData();
 
 	if (measurement_start_time <= std::chrono::system_clock::now())
@@ -301,7 +302,7 @@ void ArduPlot::DrawPlots()
 		ImGui::Begin("Repeated Messages");
 		for (size_t i = 0; i < msg_box.size(); i++)
 		{
-			ImGui::Text(msg_box.at(i).c_str());
+			ImGui::Text("%s", msg_box.at(i).c_str());
 		}
 		ImGui::End();
 	}
