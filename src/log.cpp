@@ -42,6 +42,7 @@ void SerialConsole::Clear()
 void SerialConsole::AddLog(const char *fmt, ...)
 {
 	int old_size = Buf.size();
+
 	va_list args;
 	va_start(args, fmt);
 	Buf.appendfv(fmt, args);

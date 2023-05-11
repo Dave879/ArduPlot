@@ -26,27 +26,3 @@ void ScrollingBuffer::Erase()
     }
 }
 
-float findMin(float arr[], int ArrSize)
-{
-	float min = arr[0];
-	for (size_t i = 1; i < ArrSize; i++)
-	{
-		if (arr[i] < min)
-		{
-			min = arr[i];
-		}
-		// std::cout << "i: " << i << " -> " << arr[i] << std::endl;
-	}
-	return min;
-}
-
-float findMax(float arr[], int ArrSize)
-{
-	float max = arr[0];
-	for (size_t i = 1; i < ArrSize; i++)
-	{
-		if (arr[i] > max)
-			max = arr[i];
-	}
-	return max;
-}

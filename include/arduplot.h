@@ -50,7 +50,7 @@ public:
 		NAME,
 	};
 
-	//std::mutex mtx;
+	std::mutex mtx;
 	bool read_thread_started = false;
 	std::thread read_thread;
 
@@ -96,4 +96,5 @@ public:
 
 	ArduPlot();
 	void update() override;
+	~ArduPlot();
 };

@@ -10,6 +10,19 @@ ArduPlot::ArduPlot() : Application(500, 300, "ArduPlot")
 ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 #endif
 {
+	std::string name =
+		 R"(
+    ___             __      ____  __      __ 
+   /   |  _________/ /_  __/ __ \/ /___  / /_
+  / /| | / ___/ __  / / / / /_/ / / __ \/ __/
+ / ___ |/ /  / /_/ / /_/ / ____/ / /_/ / /_  
+/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.1a
+                                             
+)";
+
+	AP_LOG_b("―――――――――――――――――――――――――――――――――――――――――――――――――");
+	AP_LOG_b(name);
+	AP_LOG_b("―――――――――――――――――――――――――――――――――――――――――――――――――");
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	startTime = ImGui::GetTime();
@@ -20,78 +33,73 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 
 void ArduPlot::update()
 {
-	//AP_LOG("Render loop started");
+	mtx.lock();
 	ImGui::DockSpaceOverViewport();
-	//AP_LOG("1");
 	input_stream.DrawDataInputPanel();
-	//AP_LOG("2");
 	if (input_stream.IsConnected() && !read_thread_started)
 	{
-		AP_LOG("Spawned thread")
-		read_thread = std::thread(&ArduPlot::ReadThread, this);
 		read_thread_started = true;
+		read_thread = std::thread(&ArduPlot::ReadThread, this);
+		AP_LOG("Spawned thread")
 	}
 	if (!input_stream.IsConnected() && read_thread_started)
 	{
-		AP_LOG("Try to join read thread...");
+		AP_LOG("Trying to join read thread...");
+		read_thread_started = false;
 		read_thread.join();
 		AP_LOG("Joined!");
 	}
 
-	//AP_LOG("3");
-	//mtx.lock();
-	//AP_LOG("4");
 	DrawStatWindow();
-	//AP_LOG("5");
 	DrawPlots();
-	//AP_LOG("6");
 	json_console.Display();
-	//AP_LOG("7");
 	serial_console.Display();
-	//AP_LOG("8");
-	//mtx.unlock();
-	//AP_LOG("9");
 	seconds_since_start += ImGui::GetIO().DeltaTime;
-	//AP_LOG("Render loop finished");
+	mtx.unlock();
 }
 
 void ArduPlot::ReadThread()
 {
-	AP_LOG("Read thread started")
 	measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+	bool b = false;
 
-	while (input_stream.IsConnected())
+	while (input_stream.IsConnected() && read_thread_started)
 	{
 		current_data_packet = input_stream.GetData();
 		Mb_s += current_data_packet.size();
 		data_buffer += current_data_packet;
-		if (current_data_packet.size() > 0)
-		{
-			AP_LOG(current_data_packet.size());
-		}
 
 		std::string pkt = "";
+		simdjson::dom::object obj;
+		simdjson::padded_string padded;
 		do
 		{
-			
 			pkt = GetFirstJsonPacketInBuffer(data_buffer);
+
 			if (pkt != "")
 			{
-				AP_LOG(pkt)
 				try
 				{
-					simdjson::padded_string json_data(pkt);
-					simdjson::dom::object obj;
-					auto error = parser.parse(json_data).get(obj);
+					padded = pkt;
+					simdjson::error_code error = parser.parse(padded).get(obj);
+
 					if (error == simdjson::error_code::SUCCESS)
 					{
-						AP_LOG("UpdateDataStructures calleds")
 						UpdateDataStructures(obj);
-					} else{
-						AP_LOG_r(error)
 					}
 					pkt_idx_++;
-					json_console.Add(pkt + "\n");
+					if (display_Mbps < 50)
+					{
+						json_console.Add(pkt + "\n");
+					}
+					else
+					{
+						if (!b)
+						{
+							b = true;
+							json_console.Add("Data too fast, disabled json packet output!");
+						}
+					}
 				}
 				catch (const std::exception &e)
 				{
@@ -101,36 +109,71 @@ void ArduPlot::ReadThread()
 				}
 			}
 
-			if (measurement_start_time <= std::chrono::system_clock::now())
-			{
-				measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
-				Mb_s = Mb_s * 8 / 1e+6;
-				display_Mbps = Mb_s;
-				display_count = count;
-				Mb_s = 0;
-				count = 0;
-			}
-			count++;
 		} while (pkt != "");
-		current_data_packet = "";
-		data_buffer = "";
-		Mb_s = 0;
+
+		count++;
+		if (measurement_start_time <= std::chrono::system_clock::now())
+		{
+			measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+			display_Mbps = Mb_s * 8 / 1e+6;
+			display_count = count;
+			Mb_s = 0;
+			count = 0;
+		}
 	}
-	AP_LOG("Thread closed");
+	current_data_packet = "";
+	data_buffer = "";
+	Mb_s = 0;
+	display_Mbps = 0;
+	count = 0;
+	display_count = 0;
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 {
-	const int32_t found_opening = data_buffer.find('{'), found_closing = data_buffer.find('}', found_opening);
-	if (found_opening != std::string::npos && found_closing != std::string::npos)
+	int rogue_packet_finder = data_buffer.find('}'), found_opening = data_buffer.find('{'), found_closing;
+
+	if (found_opening != std::string::npos)
 	{
-		std::string packet = data_buffer.substr(found_opening, (found_closing - found_opening) + 1);
+		if (rogue_packet_finder != std::string::npos)
+		{
+			if (rogue_packet_finder < found_opening)
+			{
+				serial_console.Add(data_buffer.substr(rogue_packet_finder + 1, found_opening - rogue_packet_finder - 1));
+			}
+			else
+			{
+				serial_console.Add(data_buffer.substr(0, found_opening));
+			}
+		}
+		else
+		{
+			serial_console.Add(data_buffer.substr(0, found_opening));
+		}
+		data_buffer = data_buffer.substr(found_opening);
+	}
+	else if (rogue_packet_finder != std::string::npos)
+	{
+		serial_console.Add(data_buffer.substr(rogue_packet_finder + 1));
+		data_buffer = "";
+		return "";
+	}
+	else
+	{
+		serial_console.Add(data_buffer);
+		data_buffer = "";
+		return "";
+	}
+
+	found_closing = data_buffer.find('}');
+	if (found_closing != std::string::npos)
+	{
+		std::string packet = data_buffer.substr(0, found_closing + 1);
 		data_buffer = data_buffer.substr(found_closing + 1);
 		return packet;
 	}
 	return "";
 }
-
 void ArduPlot::DrawStatWindow()
 {
 	ImGui::Begin("Stats");
@@ -151,13 +194,15 @@ void ArduPlot::DrawStatWindow()
 
 void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 {
+	std::vector<std::string> tkn;
 	for (auto [key, value] : j)
 	{
-		std::vector<std::string> tkn = split(std::string(key), "£");
+		tkn = split(std::string(key), '&');
 		try
 		{
-			if (tkn.at(tkn_idx_::TYPE) == "n") // If graph has numerical data
+			switch (tkn.at(tkn_idx_::TYPE).at(0))
 			{
+			case 'n':
 				if (tkn.at(tkn_idx_::GRAPHTYPE) == "l" || tkn.at(tkn_idx_::GRAPHTYPE) == "b") // Update data structure for line or bar graph
 				{
 					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
@@ -228,8 +273,8 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						AP_LOG_b("Created new heatmap: " << iid_graphs.at(graphID).graphName);
 					}
 				}
-			}
-			else if (tkn.at(tkn_idx_::TYPE) == "s")
+				break;
+			case 's':
 			{
 				std::string_view val = value;
 				std::string contents(val);
@@ -239,8 +284,8 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				}
 				serial_console.Add(contents.c_str());
 			}
-			else if (tkn.at(tkn_idx_::TYPE) == "i")
-			{
+			break;
+			case 'i':
 				uC_idx = value;
 				if (uC_idx < pkt_idx_) // Microcontroller reflashed/rebooted/crashed/power was unplugged
 				{
@@ -263,9 +308,8 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 					packets_lost += uC_idx - pkt_idx_;
 					pkt_idx_ = uC_idx;
 				}
-			}
-			else if (tkn.at(tkn_idx_::TYPE) == "m")
-			{
+				break;
+			case 'm':
 				uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
 				std::string_view val = value;
 				std::string contents(val);
@@ -277,6 +321,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				{
 					msg_box.push_back(contents);
 				}
+				break;
 			}
 		}
 		catch (const std::exception &e)
@@ -338,6 +383,18 @@ void ArduPlot::DrawPlots()
 			ImGui::Text("%s", msg_box.at(i).c_str());
 		}
 		ImGui::End();
+	}
+}
+
+ArduPlot::~ArduPlot()
+{
+	AP_LOG_g("Cleaning up...");
+	if (read_thread_started)
+	{
+		AP_LOG("Trying to join read thread...");
+		read_thread_started = false;
+		read_thread.join();
+		AP_LOG("Joined!");
 	}
 }
 
