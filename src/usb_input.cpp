@@ -16,7 +16,7 @@ USBInput::~USBInput()
 void USBInput::DrawDataInputPanel()
 {
 	ImGui::Begin("USB input");
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 	paths = ScanForAvailableBoards();
 	if (paths.size() == 0)
 	{
@@ -42,8 +42,11 @@ void USBInput::DrawDataInputPanel()
 				current_item = last_item;
 				if (!connected_to_device && !pressed_disconnect)
 				{
-					if (ConnectToUSB(current_item) == 0)
+					if (ConnectToUSB(current_item) == 0){
 						connected_to_device = true;
+					} else {
+						connected_to_device = false;
+					}
 				}
 				break;
 			}
@@ -51,7 +54,7 @@ void USBInput::DrawDataInputPanel()
 	}
 	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.
 	{
-		for (int n = 0; n < paths.size(); n++)
+		for (long unsigned int n = 0; n < paths.size(); n++)
 		{
 			bool is_selected = (current_item == paths.at(n)); // You can store your selection however you want, outside or inside your objects
 			if (ImGui::Selectable(paths.at(n).c_str(), is_selected))
@@ -64,7 +67,6 @@ void USBInput::DrawDataInputPanel()
 		}
 		ImGui::EndCombo();
 	}
-	ImGui::SameLine();
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 
 	if (ImGui::Button(!connected_to_device ? "Connect" : "Disconnect", ImGui::GetContentRegionAvail()))
@@ -72,8 +74,11 @@ void USBInput::DrawDataInputPanel()
 		if (!connected_to_device)
 		{
 			pressed_disconnect = false;
-			if (ConnectToUSB(current_item) == 0)
+			if (ConnectToUSB(current_item) == 0){
 				connected_to_device = false;
+			} else {
+				connected_to_device = true;
+			}
 		}
 		else
 		{
@@ -139,26 +144,32 @@ bool USBInput::IsConnected()
 uint8_t USBInput::ConnectToUSB(std::string port)
 {
 	std::string s = "/dev/" + port;
-	try
+	if (s != "/dev/")
 	{
-		sfd = openAndConfigureSerialPort(s.c_str(), 115200); // Fake baudrate, need to implement it correctly for actual Arduino boards with serial to usb chip
-		if (sfd > 0)
+		try
 		{
-			AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd);
-			return 0;
+			sfd = openAndConfigureSerialPort(s.c_str(), 115200); // Fake baudrate, need to implement it correctly for actual Arduino boards with serial to usb chip
+			if (sfd > 0)
+			{
+				AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd);
+				return 0;
+			}
+			else
+			{
+				AP_LOG_r("There was an error connecting to " << s);
+				return 1;
+			}
 		}
-		else
+		catch (const std::exception &e)
 		{
-			AP_LOG_r("There was an error connecting to " << s);
+			AP_LOG_r(e.what());
 			return 1;
 		}
 	}
-	catch (const std::exception &e)
+	else
 	{
-		AP_LOG_r(e.what());
 		return 1;
 	}
-	// flushSerialData();
 }
 
 std::vector<std::string> USBInput::ScanForAvailableBoards()

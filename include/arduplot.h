@@ -50,6 +50,10 @@ public:
 		NAME,
 	};
 
+	std::mutex mtx;
+	bool read_thread_started = false;
+	std::thread read_thread;
+
 	simdjson::padded_string json_data;
 	simdjson::dom::parser parser;
 	simdjson::ondemand::document doc;
@@ -79,7 +83,7 @@ public:
 	std::string data_buffer = "";
 	std::string current_data_packet = "";
 
-	void GetAndEvaluateInputData();
+	void ReadThread();
 
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	std::vector<iDGraphData> id_graphs;
@@ -92,4 +96,5 @@ public:
 
 	ArduPlot();
 	void update() override;
+	~ArduPlot();
 };

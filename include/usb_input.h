@@ -22,7 +22,7 @@ private:
 	std::string current_item = "";
 	std::string last_item = "";
 	bool pressed_disconnect = false;
-	bool connected_to_device = false;
+	std::atomic<bool> connected_to_device = false;
 	int sfd = 0;
 
 public:
