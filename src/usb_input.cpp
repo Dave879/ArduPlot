@@ -23,7 +23,6 @@ void USBInput::DrawDataInputPanel()
 		current_item = "";
 		if (connected_to_device)
 		{
-			connected_to_device = false;
 			closeSerialPort();
 			AP_LOG_g("Closed USB connection");
 			paths = ScanForAvailableBoards();
@@ -31,6 +30,7 @@ void USBInput::DrawDataInputPanel()
 				current_item = paths.at(0);
 			else
 				current_item = "";
+			connected_to_device = false;
 		}
 	}
 	else
@@ -42,9 +42,12 @@ void USBInput::DrawDataInputPanel()
 				current_item = last_item;
 				if (!connected_to_device && !pressed_disconnect)
 				{
-					if (ConnectToUSB(current_item) == 0){
+					if (ConnectToUSB(current_item) == 0)
+					{
 						connected_to_device = true;
-					} else {
+					}
+					else
+					{
 						connected_to_device = false;
 					}
 				}
@@ -74,9 +77,12 @@ void USBInput::DrawDataInputPanel()
 		if (!connected_to_device)
 		{
 			pressed_disconnect = false;
-			if (ConnectToUSB(current_item) == 0){
+			if (ConnectToUSB(current_item) == 0)
+			{
 				connected_to_device = false;
-			} else {
+			}
+			else
+			{
 				connected_to_device = true;
 			}
 		}
@@ -148,6 +154,7 @@ uint8_t USBInput::ConnectToUSB(std::string port)
 	{
 		try
 		{
+			AP_LOG_g("Connecting to " << s << "...");
 			sfd = openAndConfigureSerialPort(s.c_str(), 115200); // Fake baudrate, need to implement it correctly for actual Arduino boards with serial to usb chip
 			if (sfd > 0)
 			{

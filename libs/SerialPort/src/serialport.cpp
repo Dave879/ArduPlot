@@ -27,7 +27,7 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
 
    // Open port, checking for errors
 
-   sfd = open(portPath, O_RDWR | O_NOCTTY);
+   sfd = open(portPath, O_RDWR | O_NOCTTY | O_NDELAY);
    if (sfd == -1)
    {
       printf("Unable to open serial port: %s at baud rate: %d\n", portPath, baudRate);
@@ -87,7 +87,7 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
    cfsetispeed(&options, baudRate);
    cfsetospeed(&options, baudRate);
 
-   if (tcsetattr(sfd, TCSAFLUSH, &options) != 0)
+   if (tcsetattr(sfd, TCSANOW, &options) != 0)
    {
       printf("Error setting serial port attributes.\n");
       close(sfd);
