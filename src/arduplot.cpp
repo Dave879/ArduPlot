@@ -16,7 +16,7 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
    /   |  _________/ /_  __/ __ \/ /___  / /_
   / /| | / ___/ __  / / / / /_/ / / __ \/ __/
  / ___ |/ /  / /_/ / /_/ / ____/ / /_/ / /_  
-/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.1a
+/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.2a
                                              
 )";
 
@@ -33,7 +33,6 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 
 void ArduPlot::update()
 {
-	mtx.lock();
 	ImGui::DockSpaceOverViewport();
 	input_stream.DrawDataInputPanel();
 	if (input_stream.IsConnected() && !read_thread_started)
@@ -51,11 +50,12 @@ void ArduPlot::update()
 	}
 
 	DrawStatWindow();
+	mtx.lock();
 	DrawPlots();
+	mtx.unlock();
 	json_console.Display();
 	serial_console.Display();
 	seconds_since_start += ImGui::GetIO().DeltaTime;
-	mtx.unlock();
 }
 
 void ArduPlot::ReadThread()
@@ -85,7 +85,9 @@ void ArduPlot::ReadThread()
 
 					if (error == simdjson::error_code::SUCCESS)
 					{
+						mtx.lock();
 						UpdateDataStructures(obj);
+						mtx.unlock();
 					}
 					pkt_idx_++;
 					if (display_Mbps < 50)
@@ -198,6 +200,25 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 	for (auto [key, value] : j)
 	{
 		tkn = split(std::string(key), '&');
+
+		if (tkn.size() > 2)
+		{
+			if (tkn.at(tkn_idx_::GRAPHTYPE) == "l" || tkn.at(tkn_idx_::GRAPHTYPE) == "b")
+			{
+				if (FindInVec(assoc_name_id_bar_line, tkn.at(tkn_idx_::NAME)) < 0)
+				{
+					assoc_name_id_bar_line.push_back(tkn.at(tkn_idx_::NAME));
+				}
+			}
+			else if (tkn.at(tkn_idx_::GRAPHTYPE) == "h")
+			{
+				if (FindInVec(assoc_name_id_heatmap, tkn.at(tkn_idx_::NAME)) < 0)
+				{
+					assoc_name_id_heatmap.push_back(tkn.at(tkn_idx_::NAME));
+				}
+			}
+		}
+
 		try
 		{
 			switch (tkn.at(tkn_idx_::TYPE).at(0))
@@ -205,11 +226,13 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			case 'n':
 				if (tkn.at(tkn_idx_::GRAPHTYPE) == "l" || tkn.at(tkn_idx_::GRAPHTYPE) == "b") // Update data structure for line or bar graph
 				{
-					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
+					uint16_t graphID = FindInVec(assoc_name_id_bar_line, tkn.at(tkn_idx_::NAME));
+					uint16_t merge_ID = std::stoul(tkn.at(tkn_idx_::ID));
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
 						id_graphs.at(graphID).graphName = graphName;
+						id_graphs.at(graphID).merge_ID = merge_ID;
 						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
 						if (tkn.size() == 6)
 						{
@@ -230,7 +253,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				}
 				else if (tkn.at(tkn_idx_::GRAPHTYPE) == "h") // Update data structure for heatmap
 				{
-					uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
+					uint16_t graphID = FindInVec(assoc_name_id_heatmap, tkn.at(tkn_idx_::NAME)); // std::stoul(tkn.at(tkn_idx_::ID));
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
@@ -246,7 +269,14 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						size_t i = 0;
 						for (auto element : value.get_array())
 						{
-							iid_graphs.at(graphID).buffer.at(i) = double(element);
+							if (iid_graphs.at(graphID).buffer.size())
+							{
+								iid_graphs.at(graphID).buffer.at(i) = (double)element;
+							}
+							else
+							{
+								AP_LOG_r("Overflow after heatmap array creation: " << i);
+							}
 							i++;
 						}
 					}
@@ -256,6 +286,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						iid_graphs.push_back(gd);
 						iid_graphs.at(graphID).sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX));
 						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
+						iid_graphs.at(graphID).buffer.reserve(iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey);
 
 						if (tkn.size() == 8)
 						{
@@ -266,7 +297,14 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						size_t i = 0;
 						for (auto element : value.get_array())
 						{
-							iid_graphs.at(graphID).buffer.push_back(double(element));
+							if (i < iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey)
+							{
+								iid_graphs.at(graphID).buffer.push_back(double(element));
+							}
+							else
+							{
+								AP_LOG_r("Packet array size doesn't agree with actual array");
+							}
 							i++;
 						}
 
@@ -335,39 +373,73 @@ void ArduPlot::DrawPlots()
 {
 	for (uint16_t i = 0; i < id_graphs.size(); i++)
 	{
-		ImGui::Begin(id_graphs.at(i).graphName.c_str());
-
-		ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
-
-		static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
-		ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
-
-		if (id_graphs.at(i).has_set_min_max)
+		if (!id_graphs.at(i).already_drawn)
 		{
-			ImPlot::SetNextPlotLimitsY(id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
+
+			ImGui::Begin(id_graphs.at(i).graphName.c_str());
+
+			ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
+
+			static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
+			ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
+
+			if (id_graphs.at(i).has_set_min_max)
+			{
+				ImPlot::SetNextPlotLimitsY(id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
+			}
+			else
+			{
+				ImPlot::SetNextPlotLimitsY(-100, 100);
+			}
+
+			if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
+			{
+				if (id_graphs.at(i).merge_ID > 0)
+				{
+					for (size_t m = 0; m < id_graphs.size(); m++)
+					{
+						if (id_graphs.at(m).merge_ID == id_graphs.at(i).merge_ID)
+						{
+							ImPlot::PlotLine(id_graphs.at(m).graphName.c_str(), &id_graphs.at(m).buffer.Data[0].x, &id_graphs.at(m).buffer.Data[0].y, id_graphs.at(m).buffer.Data.size(), id_graphs.at(m).buffer.Offset, 2 * sizeof(float));
+							id_graphs.at(m).already_drawn = true;
+						}
+					}
+				}
+				else if (id_graphs.at(i).merge_ID == 0)
+				{
+					ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
+				}
+				ImPlot::EndPlot();
+			}
+			ImGui::End();
 		}
-		else
-		{
-			ImPlot::SetNextPlotLimitsY(-100, 100);
-		}
-		if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
-		{
-			ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
-			ImPlot::EndPlot();
-		}
-		ImGui::End();
 	}
+	for (uint16_t i = 0; i < id_graphs.size(); i++)
+		id_graphs.at(i).already_drawn = false;
 
 	for (uint16_t i = 0; i < iid_graphs.size(); i++)
 	{
 		ImGui::Begin(iid_graphs.at(i).graphName.c_str());
+		if (!iid_graphs.at(i).has_set_min_max)
+		{
+			ImGui::DragFloatRange2("Min / Max", &iid_graphs.at(i).min, &iid_graphs.at(i).max, 0.01f, -1000, 1000);
+			ImGui::SameLine();
+		}
 
-		ImGui::DragFloatRange2("Min / Max", &iid_graphs.at(i).min, &iid_graphs.at(i).max, 0.01f, -1000, 1000);
+		static bool checked = false;
+		std::string format;
+
+		if (checked)
+			format = "%0.f";
+		else
+			format = "";
+
+		ImGui::Checkbox("Show numbers", &checked);
 
 		ImPlot::PushColormap(ImPlotColormap_Viridis);
-		if (ImPlot::BeginPlot("##Heatmap1", NULL, NULL, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y), ImPlotFlags_NoLegend | ImPlotFlags_NoMousePos, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Invert))
+		if (ImPlot::BeginPlot("##Heatmap1", NULL, NULL, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y), ImPlotFlags_NoLegend | ImPlotFlags_NoMousePos, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Invert))
 		{
-			ImPlot::PlotHeatmap("heat", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max, "%.0f");
+			ImPlot::PlotHeatmap("heat", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max, format.c_str());
 			ImPlot::EndPlot();
 		}
 		ImPlot::PopColormap();

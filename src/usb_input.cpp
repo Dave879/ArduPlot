@@ -53,6 +53,10 @@ void USBInput::DrawDataInputPanel()
 				}
 				break;
 			}
+			if (current_item == "")
+			{
+				current_item = paths.at(i);
+			}
 		}
 	}
 	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str())) // The second parameter is the label previewed before opening the combo.

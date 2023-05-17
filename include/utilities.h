@@ -44,6 +44,8 @@ enum GraphType
 
 struct iDGraphData
 {
+	int32_t merge_ID = 0;
+	bool already_drawn = false;
 	float history = 20.0f;
 	std::string graphName = "";
 	GraphType type;
@@ -78,3 +80,4 @@ struct sGraphData
 	ScrollingBuffer buffer;
 };
 
+int32_t FindInVec(const std::vector<std::string> &vec, const std::string &s);

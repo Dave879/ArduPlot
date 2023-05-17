@@ -54,6 +54,9 @@ public:
 	bool read_thread_started = false;
 	std::thread read_thread;
 
+	std::vector<std::string> assoc_name_id_bar_line;
+	std::vector<std::string> assoc_name_id_heatmap;
+
 	simdjson::padded_string json_data;
 	simdjson::dom::parser parser;
 	simdjson::ondemand::document doc;

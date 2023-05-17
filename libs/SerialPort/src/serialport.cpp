@@ -33,7 +33,7 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
       printf("Unable to open serial port: %s at baud rate: %d\n", portPath, baudRate);
       return sfd;
    }
-   fcntl(sfd, F_SETFL, FNDELAY);
+   fcntl(sfd, F_SETFL, 0);
 
    // Configure i/o baud rate settings
    struct termios options;

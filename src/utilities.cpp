@@ -26,3 +26,16 @@ void ScrollingBuffer::Erase()
     }
 }
 
+int32_t FindInVec(const std::vector<std::string> &vec, const std::string &s)
+{
+	for (size_t i = 0; i < vec.size(); i++)
+	{
+		if (vec.at(i) == s)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+
