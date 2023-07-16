@@ -25,7 +25,7 @@ private:
 	void OnScroll(double xoffset, double yoffset);
 	void InitImGui();
 	void InitOpenGL();
-	float GetDpiScale() const;
+	float GetDpiScale();
 
 	GLFWwindow *window;
 
@@ -34,7 +34,7 @@ private:
 	double mousePosy;
 	int width, height;
 	std::string title;
-	float xscale = 1, yscale = 1;
+	float xscale, yscale;
 
 	bool mouseScrollEvent;
 	bool mouseIsOverViewport;

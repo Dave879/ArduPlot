@@ -19,7 +19,6 @@ Application::Application(int width, int height, const std::string &title) : mous
 	{
 		static_cast<Application *>(glfwGetWindowUserPointer(window))->OnScroll(xoffset, yoffset);
 	};
-
 	glfwSetScrollCallback(window, func);
 	InitImGui();
 }
@@ -73,10 +72,9 @@ void Application::InitOpenGL()
 	glEnable(GL_MULTISAMPLE);
 }
 
-float Application::GetDpiScale() const
+float Application::GetDpiScale()
 {
 	auto monitor = glfwGetPrimaryMonitor();
-	float xscale = 1, yscale = 1;
 	glfwGetMonitorContentScale(monitor, &xscale, &yscale);
 	return xscale;
 }
@@ -100,6 +98,9 @@ void Application::InitImGui()
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;		// Enable Docking
 	// io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Enable Multi-Viewport / Platform Windows
+
+	io.FontGlobalScale = 1.0f / xscale;
+   io.DisplayFramebufferScale = ImVec2(xscale,xscale);
 
 	ImGui::StyleColorsMahiDark4();
 

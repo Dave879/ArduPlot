@@ -126,6 +126,7 @@ int get_baud(int baud)
     case 230400:
         return B230400;
     case 460800:
+    #ifndef __APPLE__
         return B460800;
     case 500000:
         return B500000;
@@ -149,6 +150,7 @@ int get_baud(int baud)
         return B3500000;
     case 4000000:
         return B4000000;
+    #endif 
     default:
         return B115200;
     }

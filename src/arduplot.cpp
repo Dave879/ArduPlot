@@ -181,17 +181,17 @@ void ArduPlot::DrawStatWindow()
 {
 	ZoneScoped;
 	ImGui::Begin("Stats");
-	ImGui::Text("Packets dropped: %lu", packets_lost);
+	ImGui::Text("Packets dropped: %llu", packets_lost);
 	if (ImGui::BeginTable("Index", 2))
 	{
 		ImGui::TableNextColumn();
-		ImGui::Text("µC index: %lu", uC_idx);
+		ImGui::Text("µC index: %llu", uC_idx);
 		ImGui::TableNextColumn();
-		ImGui::Text("Internal index: %lu", pkt_idx_);
+		ImGui::Text("Internal index: %llu", pkt_idx_);
 		ImGui::EndTable();
 	}
 	ImGui::Text("Throughput: %.3f Mb/s", display_Mbps);
-	ImGui::Text("Cycles: %lu", display_count);
+	ImGui::Text("Cycles: %llu", display_count);
 
 	ImGui::End();
 }
