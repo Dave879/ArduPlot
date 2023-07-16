@@ -49,7 +49,6 @@ FetchContent_Declare (
 
 FetchContent_MakeAvailable(tracy)
 
-
 target_include_directories(${PROJECT_NAME} PUBLIC
 	./
 	include
@@ -61,7 +60,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	libs/json/
 	${tracy_SOURCE_DIR}/public/
 )
-
 
 target_link_libraries(${PROJECT_NAME} imgui implot glfw glad SerialPort json TracyClient)
 
