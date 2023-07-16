@@ -1,7 +1,9 @@
 #pragma once
 
 #include <vector>
-#include <Mahi/Gui.hpp>
+#include <string>
+#include <imgui.h>
+#include <implot.h>
 
 // #define AP_LOG(x) std::cout <<  __FILE__  << "(" << __LINE__ << ") " << x << std::endl;
 
@@ -14,6 +16,8 @@ const std::string reset("\033[0m");
 #define AP_LOG_r(x) std::cout << red << x << reset << std::endl;
 #define AP_LOG_g(x) std::cout << green << x << reset << std::endl;
 #define AP_LOG_b(x) std::cout << blue << x << reset << std::endl;
+
+#define LOGERR(x) AP_LOG_r(x)
 
 #define START_TIMER std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 #define END_TIMER                                                                \
@@ -45,7 +49,9 @@ enum GraphType
 struct iDGraphData
 {
 	int32_t merge_ID = 0;
-	bool already_drawn = false;
+	bool is_parent = false;
+	bool is_child = false;
+
 	float history = 20.0f;
 	std::string graphName = "";
 	GraphType type;
@@ -57,6 +63,15 @@ struct iDGraphData
 	{
 		this->graphName = name;
 		this->type = type;
+	}
+};
+
+struct ScatterPlotData{
+	std::string graphName = "";
+	std::vector<ImPlotPoint> data;
+
+	ScatterPlotData(std::string name = "Default"){
+		this->graphName = name;
 	}
 };
 

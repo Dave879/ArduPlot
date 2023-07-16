@@ -2,18 +2,23 @@
 #include "arduplot.h"
 
 ArduPlot app;
+
+#ifdef DEBUG
+void *operator new(std ::size_t count)
+{
+    auto ptr = malloc(count);
+    TracyAlloc(ptr, count);
+    return ptr;
+}
+void operator delete(void *ptr) noexcept
+{
+    TracyFree(ptr);
+    free(ptr);
+}
+#endif
+
 int main()
 {
-    /*
-    std::vector<std::string> paths = app.input_stream.ScanForAvailableBoards();
-    AP_LOG(paths);
-    app.input_stream.ConnectToUSB(paths.at(0));
-    while (true)
-    {
-    app.update();
-    }
-    
-    */
     app.run();
     return 0;
 }

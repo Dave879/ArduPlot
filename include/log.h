@@ -1,5 +1,8 @@
 #pragma once
 #include <imgui.h>
+#include <string>
+
+#include <tracy/Tracy.hpp>
 
 //-----------------------------------------------------------------------------
 // [SECTION] Example App: Debug Log / ShowExampleAppLog()
@@ -17,7 +20,6 @@ private:
 	ImGuiTextFilter Filter;
 	ImVector<int> LineOffsets; // Index to lines offset. We maintain this with AddLog() calls.
 	bool AutoScroll;				// Keep scrolling if already at the bottom.
-
 
 	void Clear();
 	void AddLog(const char *fmt, ...);

@@ -4,8 +4,17 @@
 #define __SERIAL_PORT_H__
 
 #include <unistd.h> //ssize_t
+#include <fcntl.h> //open()
+#include <stdio.h>
+#include <termios.h>
+#include <unistd.h> //write(), read(), close()
+#include <errno.h>  //errno
+#include <cstring>
+
 
 int openAndConfigureSerialPort(const char *portPath, int baudRate);
+
+int get_baud(int baud);
 
 bool serialPortIsOpen();
 

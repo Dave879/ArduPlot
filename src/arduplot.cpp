@@ -1,13 +1,10 @@
 
 #include "arduplot.h"
 
-using namespace mahi::gui;
-using namespace mahi::util;
-
 #if __APPLE__
 ArduPlot::ArduPlot() : Application(500, 300, "ArduPlot")
 #elif __linux__
-ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
+ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
 #endif
 {
 	std::string name =
@@ -16,7 +13,7 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
    /   |  _________/ /_  __/ __ \/ /___  / /_
   / /| | / ___/ __  / / / / /_/ / / __ \/ __/
  / ___ |/ /  / /_/ / /_/ / ____/ / /_/ / /_  
-/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.2a
+/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.3a
                                              
 )";
 
@@ -29,6 +26,7 @@ ArduPlot::ArduPlot() : Application(1200, 500, "ArduPlot")
 	data_buffer = "";
 	current_data_packet = "";
 	start_time = std::chrono::steady_clock::now();
+	tracy::SetThreadName("Main thread");
 }
 
 void ArduPlot::update()
@@ -62,9 +60,12 @@ void ArduPlot::ReadThread()
 {
 	measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
 	bool b = false;
+	tracy::SetThreadName("Serial Read thread");
 
 	while (input_stream.IsConnected() && read_thread_started)
 	{
+		ZoneScoped;
+
 		current_data_packet = input_stream.GetData();
 		Mb_s += current_data_packet.size();
 		data_buffer += current_data_packet;
@@ -178,24 +179,26 @@ std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 }
 void ArduPlot::DrawStatWindow()
 {
+	ZoneScoped;
 	ImGui::Begin("Stats");
-	ImGui::Text("Packets dropped: %llu", packets_lost);
+	ImGui::Text("Packets dropped: %lu", packets_lost);
 	if (ImGui::BeginTable("Index", 2))
 	{
 		ImGui::TableNextColumn();
-		ImGui::Text("µC index: %llu", uC_idx);
+		ImGui::Text("µC index: %lu", uC_idx);
 		ImGui::TableNextColumn();
-		ImGui::Text("Internal index: %llu", pkt_idx_);
+		ImGui::Text("Internal index: %lu", pkt_idx_);
 		ImGui::EndTable();
 	}
 	ImGui::Text("Throughput: %.3f Mb/s", display_Mbps);
-	ImGui::Text("Cycles: %llu", display_count);
+	ImGui::Text("Cycles: %lu", display_count);
 
 	ImGui::End();
 }
 
 void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 {
+	ZoneScoped;
 	std::vector<std::string> tkn;
 	for (auto [key, value] : j)
 	{
@@ -231,8 +234,8 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
-						id_graphs.at(graphID).graphName = graphName;
-						id_graphs.at(graphID).merge_ID = merge_ID;
+						id_graphs.at(graphID).graphName = graphName; // This needs to stay here in order to throw an exception for the first time, when the graph is still not created in the vector
+
 						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
 						if (tkn.size() == 6)
 						{
@@ -247,6 +250,9 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						if (tkn.at(tkn_idx_::GRAPHTYPE) == "b")
 							gd.type = GraphType::BAR;
 						gd.buffer.AddPoint(seconds_since_start, double(value));
+						gd.merge_ID = merge_ID;
+						if (gd.merge_ID == 0)
+							gd.is_parent = true; // The graph is displayed no matter what, can't be a multiline graph
 						id_graphs.push_back(gd);
 						AP_LOG_b("Created new graph: " << id_graphs.at(graphID).graphName)
 					}
@@ -373,49 +379,63 @@ void ArduPlot::DrawPlots()
 {
 	for (uint16_t i = 0; i < id_graphs.size(); i++)
 	{
-		if (!id_graphs.at(i).already_drawn)
-		{
+		ZoneScoped;
+		TracyMessageL(id_graphs.at(i).graphName.c_str());
 
+		for (size_t i = 0; i < id_graphs.size(); i++)
+		{
+			if (id_graphs.at(i).merge_ID > 0 && !id_graphs.at(i).is_child)
+			{
+				id_graphs.at(i).is_parent = true;
+				for (size_t j = 0; j < id_graphs.size(); j++)
+				{
+					if (id_graphs.at(i).merge_ID == id_graphs.at(j).merge_ID && i != j)
+						id_graphs.at(j).is_child = true;
+				}
+			}
+		}
+
+		if (id_graphs.at(i).is_parent)
+		{
 			ImGui::Begin(id_graphs.at(i).graphName.c_str());
 
-			ImGui::SliderFloat("History", &id_graphs.at(i).history, 1, 135, "%.1f s");
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+			ImGui::SliderFloat("", &id_graphs.at(i).history, 1, 100, "History: %.1f s");
 
-			static ImPlotAxisFlags rt_axis = ImPlotAxisFlags_None;
-			ImPlot::SetNextPlotLimitsX(seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
-
-			if (id_graphs.at(i).has_set_min_max)
+			if (ImPlot::BeginPlot(("##" + id_graphs.at(i).graphName).c_str(), ImVec2(-1, -1)))
 			{
-				ImPlot::SetNextPlotLimitsY(id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
-			}
-			else
-			{
-				ImPlot::SetNextPlotLimitsY(-100, 100);
-			}
-
-			if (ImPlot::BeginPlot("##Scrolling", NULL, NULL, ImVec2(-1, -1), 0, rt_axis, rt_axis))
-			{
-				if (id_graphs.at(i).merge_ID > 0)
+				ImPlot::SetupAxisLimits(ImAxis_X1, seconds_since_start - id_graphs.at(i).history, seconds_since_start, ImGuiCond_Always);
+				if (id_graphs.at(i).has_set_min_max)
+				{
+					ImPlot::SetupAxisLimits(ImAxis_Y1, id_graphs.at(i).min, id_graphs.at(i).max, ImGuiCond_Always);
+				}
+				else
+				{
+					// ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_AutoFit); // Need to experiment with auto fitting graphs, while still retaining the freedom of manually panning
+					ImPlot::SetupAxisLimits(ImAxis_Y1, -100, 100);
+				}
+				if (id_graphs.at(i).merge_ID > 0) // If graph is multiline
 				{
 					for (size_t m = 0; m < id_graphs.size(); m++)
 					{
 						if (id_graphs.at(m).merge_ID == id_graphs.at(i).merge_ID)
 						{
-							ImPlot::PlotLine(id_graphs.at(m).graphName.c_str(), &id_graphs.at(m).buffer.Data[0].x, &id_graphs.at(m).buffer.Data[0].y, id_graphs.at(m).buffer.Data.size(), id_graphs.at(m).buffer.Offset, 2 * sizeof(float));
-							id_graphs.at(m).already_drawn = true;
+							ZoneScoped;
+							TracyMessageL(id_graphs.at(m).graphName.c_str());
+							ImPlot::PlotLine(id_graphs.at(m).graphName.c_str(), &id_graphs.at(m).buffer.Data[0].x, &id_graphs.at(m).buffer.Data[0].y, id_graphs.at(m).buffer.Data.size(), ImPlotAxisFlags_None, id_graphs.at(m).buffer.Offset, 2 * sizeof(float));
 						}
 					}
 				}
 				else if (id_graphs.at(i).merge_ID == 0)
 				{
-					ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
+					TracyMessageL(id_graphs.at(i).graphName.c_str());
+					ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), ImPlotAxisFlags_None, id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
 				}
 				ImPlot::EndPlot();
 			}
 			ImGui::End();
 		}
 	}
-	for (uint16_t i = 0; i < id_graphs.size(); i++)
-		id_graphs.at(i).already_drawn = false;
 
 	for (uint16_t i = 0; i < iid_graphs.size(); i++)
 	{
@@ -437,9 +457,10 @@ void ArduPlot::DrawPlots()
 		ImGui::Checkbox("Show numbers", &checked);
 
 		ImPlot::PushColormap(ImPlotColormap_Viridis);
-		if (ImPlot::BeginPlot("##Heatmap1", NULL, NULL, ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y), ImPlotFlags_NoLegend | ImPlotFlags_NoMousePos, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_Invert))
+		if (ImPlot::BeginPlot("##Heatmap1", ImVec2(-1, -1), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText))
 		{
-			ImPlot::PlotHeatmap("heat", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max, format.c_str());
+			ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoDecorations);
+			ImPlot::PlotHeatmap("Heatmap", &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max, format.c_str());
 			ImPlot::EndPlot();
 		}
 		ImPlot::PopColormap();
@@ -463,12 +484,69 @@ ArduPlot::~ArduPlot()
 	AP_LOG_g("Cleaning up...");
 	if (read_thread_started)
 	{
-		AP_LOG("Trying to join read thread...");
 		read_thread_started = false;
+		AP_LOG("Trying to join read thread...");
 		read_thread.join();
 		AP_LOG("Joined!");
 	}
 }
+
+/*
+	 static ImVector<ImPlotPoint> data;
+	 static ImVector<ImPlotRect> rects;
+	 static ImPlotRect limits, select;
+	 static bool init = true;
+	 if (init) {
+		  for (int i = 0; i < 50; ++i)
+		  {
+				double x = RandomRange(0.1, 0.9);
+				double y = RandomRange(0.1, 0.9);
+				data.push_back(ImPlotPoint(x,y));
+		  }
+		  init = false;
+	 }
+
+	 ImGui::BulletText("Box select and left click mouse to create a new query rect.");
+	 ImGui::BulletText("Ctrl + click in the plot area to draw points.");
+
+	 if (ImGui::Button("Clear Queries"))
+		  rects.shrink(0);
+
+	 if (ImPlot::BeginPlot("##Centroid")) {
+		  ImPlot::SetupAxesLimits(0,1,0,1);
+		  if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(0) && ImGui::GetIO().KeyCtrl) {
+				ImPlotPoint pt = ImPlot::GetPlotMousePos();
+				data.push_back(pt);
+		  }
+
+		  ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 2, ImVec4(1, 0, 0, 1), -1.0f, ImVec4(1, 0, 0, 1));
+		  ImPlot::PlotScatter("Points", &data[0].x, &data[0].y, data.size(), 0, 0, 2 * sizeof(double));
+		  if (ImPlot::IsPlotSelected()) {
+				select = ImPlot::GetPlotSelection();
+				int cnt;
+				ImPlotPoint centroid = FindCentroid(data,select,cnt);
+				if (cnt > 0) {
+					 ImPlot::SetNextMarkerStyle(ImPlotMarker_Square,6);
+					 ImPlot::PlotScatter("Centroid", &centroid.x, &centroid.y, 1);
+				}
+				if (ImGui::IsMouseClicked(ImPlot::GetInputMap().SelectCancel)) {
+					 CancelPlotSelection();
+					 rects.push_back(select);
+				}
+		  }
+		  for (int i = 0; i < rects.size(); ++i) {
+				int cnt;
+				ImPlotPoint centroid = FindCentroid(data,rects[i],cnt);
+				if (cnt > 0) {
+					 ImPlot::SetNextMarkerStyle(ImPlotMarker_Square,6);
+					 ImPlot::PlotScatter("Centroid", &centroid.x, &centroid.y, 1);
+				}
+				ImPlot::DragRect(i,&rects[i].X.Min,&rects[i].Y.Min,&rects[i].X.Max,&rects[i].Y.Max,ImVec4(1,0,1,1));
+		  }
+		  limits  = ImPlot::GetPlotLimits();
+		  ImPlot::EndPlot();
+	 }
+*/
 
 /*
 

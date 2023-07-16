@@ -26,12 +26,12 @@ To correctly format the data, [MicroPlot](https://github.com/Dave879/MicroPlot) 
 
 ## Future features
 
-- Change baudrate (defaults to 9600, works regardless of baudrate for native USB boards such as the Teensy 4.1)
 - Bar graph
+- Scatter plot
 - Scroll back and stop ArduPlot time
 - Save and inspect data
 - Optional CRC in communication
 
-![ArduPlot v0.2a](img/ArduPlot%20v0.2a_2.png)
+![ArduPlot v0.3a](img/ArduPlot%20v0.3a_1.png)
 
 ![ArduPlot v0.1a](img/ArduPlot%20v0.1a_1.png)

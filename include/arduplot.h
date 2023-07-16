@@ -1,20 +1,22 @@
 #pragma once
-#include <Mahi/Gui.hpp>
-#include <Mahi/Util.hpp>
+
 #include <vector>
 #include <string>
 #include <atomic>
+#include <mutex>
 #include <thread>
 #define __OPTIMIZE__ 1
 #include <simdjson.h>
 
+#include <tracy/Tracy.hpp>
+
+#include <implot.h>
+
 #include "string_utils.h"
 #include "usb_input.h"
 #include "utilities.h"
+#include "application.h"
 #include "log.h"
-
-using namespace mahi::gui;
-using namespace mahi::util;
 
 class ArduPlot : public Application
 {
@@ -50,7 +52,7 @@ public:
 		NAME,
 	};
 
-	std::mutex mtx;
+	TracyLockable(std::mutex, mtx);
 	bool read_thread_started = false;
 	std::thread read_thread;
 
@@ -91,13 +93,17 @@ public:
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
+
+   std::vector<ScatterPlotData> scatter_plots;
+
 	std::vector<std::string> msg_box;
+
 	void UpdateDataStructures(simdjson::dom::object &j);
 	void DrawPlots();
 	void DrawStatWindow();
 	double seconds_since_start = 0;
 
 	ArduPlot();
-	void update() override;
+	void update();
 	~ArduPlot();
 };
