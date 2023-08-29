@@ -32,6 +32,69 @@ To correctly format the data, [MicroPlot](https://github.com/Dave879/MicroPlot) 
 - Save and inspect data
 - Optional CRC in communication
 
+## Running ArduPlot
+
+To run ArduPlot, you need to download the precompiled binaries from the [Releases page](https://github.com/Dave879/ArduPlot/releases)
+
+Then navigate in the folder where you extracted ArduPlot and run 
+
+```
+./ArduPlot
+```
+
+If necessary, change the permissions of the `ArduPlot` file:
+
+```
+chmod +x ArduPlot
+```
+
+### Additional info for Linux users
+
+Make sure the current user is in the `dialout` group, otherwise you will get an error while trying to connect to the serial port. To check you can run the following command:
+
+```
+groups $USER
+```
+
+To add your user to the group, run the following command, then reboot.
+
+```
+sudo usermod -a -G dialout $USER
+```
+
+## Building ArduPlot
+
+Install the packages `xorg-dev` and `libx11-dev`:
+
+```
+sudo apt install xorg-dev libx11-dev
+```
+
+In the case of a Debian-based distro
+
+Then, to configure the CMake project, run:
+
+```
+./scripts/configure.sh
+```
+
+To build:
+
+```
+./scripts/build.sh
+```
+
+Then, to run ArduPlot:
+
+```
+./scripts/run.sh
+```
+
+There is an additional script which is a shorthand of running `./scripts/build.sh` and then `./scripts/run.sh` which is called `./scripts/buildandrun.sh`
+
+> **_NOTE:_** The [-j flag](https://cmake.org/cmake/help/latest/manual/cmake.1.html#build-a-project) can be appended to the `./scripts/build.sh` and `./scripts/buildandrun.sh` commands to speed up compilation
+
+
 ![ArduPlot v0.3a](img/ArduPlot%20v0.3a_1.png)
 
 ![ArduPlot v0.1a](img/ArduPlot%20v0.1a_1.png)
