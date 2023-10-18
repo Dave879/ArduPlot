@@ -15,6 +15,7 @@
 class SerialConsole
 {
 private:
+	unsigned int buf_size;
 	std::string name;
 	ImGuiTextBuffer Buf;
 	ImGuiTextFilter Filter;
@@ -26,7 +27,11 @@ private:
 	void Draw(const char *title, bool *p_open);
 
 public:
-	SerialConsole(std::string console_name);
+	/**
+	 * @param console_name Name of the console window
+	 * @param buffer_size The size of the text buffer, if omitted defaults to unlimited buffer
+	 */
+	SerialConsole(std::string console_name, unsigned int buffer_size = 0);
 	void Display();
 	void Add(const std::string content);
 };

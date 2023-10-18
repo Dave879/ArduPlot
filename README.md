@@ -38,13 +38,13 @@ To run ArduPlot, you need to download the precompiled binaries from the [Release
 
 Then navigate in the folder where you extracted ArduPlot and run 
 
-```
+``` bash
 ./ArduPlot
 ```
 
 If necessary, change the permissions of the `ArduPlot` file:
 
-```
+``` bash
 chmod +x ArduPlot
 ```
 
@@ -52,21 +52,27 @@ chmod +x ArduPlot
 
 Make sure the current user is in the `dialout` group, otherwise you will get an error while trying to connect to the serial port. To check you can run the following command:
 
-```
+``` bash
 groups $USER
 ```
 
 To add your user to the group, run the following command, then reboot.
 
-```
+``` bash
 sudo usermod -a -G dialout $USER
 ```
 
 ## Building ArduPlot
 
+Clone the repository
+
+``` bash
+git clone --recurse-submodules https://github.com/Dave879/ArduPlot.git 
+```
+
 Install the packages `xorg-dev` and `libx11-dev`:
 
-```
+``` bash
 sudo apt install xorg-dev libx11-dev
 ```
 
@@ -74,19 +80,19 @@ In the case of a Debian-based distro
 
 Then, to configure the CMake project, run:
 
-```
+``` bash
 ./scripts/configure.sh
 ```
 
 To build:
 
-```
+``` bash
 ./scripts/build.sh
 ```
 
 Then, to run ArduPlot:
 
-```
+``` bash
 ./scripts/run.sh
 ```
 

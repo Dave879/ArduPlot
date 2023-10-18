@@ -3,6 +3,20 @@
 
 Application::Application(int width, int height, const std::string &title) : mouseScrollEvent(false), ShouldClose(false), height(height), width(width), title(title)
 {
+	mINI::INIFile file("config.ini");
+	mINI::INIStructure ini;
+	file.read(ini);
+
+	try
+	{
+		setting_scaling = std::stof(ini["settings"]["scaling"]);
+	}
+	catch(const std::exception& e)
+	{
+		AP_LOG_r("An error occured while reading the configuration file")
+		setting_scaling = 1;
+	}
+
 	InitOpenGL();
 
 #if DEBUG_OPENGL
@@ -92,7 +106,12 @@ void Application::InitImGui()
 	font_cfg.OversampleH = 1;
 	font_cfg.OversampleV = 1;
 	font_cfg.FontDataOwnedByAtlas = false;
-	io.Fonts->AddFontFromFileTTF("./resources/fonts/RobotoMono-Bold.ttf", IM_ROUND(15.0f * xscale), &font_cfg);
+
+	io.Fonts->AddFontFromFileTTF("./resources/fonts/RobotoMono-Bold.ttf", IM_ROUND(15.0f * xscale * setting_scaling), &font_cfg);
+
+	ImGuiStyle &s = ImGui::GetStyle();
+
+	s.ScaleAllSizes(setting_scaling);
 
 	io.ConfigWindowsMoveFromTitleBarOnly = true;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
@@ -148,7 +167,7 @@ void Application::run()
 		glfwSwapBuffers(window);
 		FrameMark;
 		glfwPollEvents();
-		if (/*glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS || */ glfwWindowShouldClose(window))
+		if ((glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) || glfwWindowShouldClose(window))
 			ShouldClose = true;
 
 		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();

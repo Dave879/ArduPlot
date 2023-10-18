@@ -6,6 +6,9 @@
 #include <functional>
 #include <chrono>
 #include <thread>
+
+#include <mini/ini.h>
+
 #include "utilities.h"
 
 #include "tracy/Tracy.hpp"
@@ -27,14 +30,14 @@ private:
 	void InitOpenGL();
 	float GetDpiScale();
 
-	GLFWwindow *window;
-
 	ImVec2 mouseScrollOffset;
 	double mousePosx;
 	double mousePosy;
 	int width, height;
 	std::string title;
 	float xscale, yscale;
+
+	float setting_scaling;
 
 	bool mouseScrollEvent;
 	bool mouseIsOverViewport;
@@ -47,6 +50,9 @@ private:
 public:
 	Application(int width = 1920, int height = 1080, const std::string &title = "Application");
 	bool AppShouldClose();
+
+	GLFWwindow *window;
+
 	virtual void update(){};
 	void run();
 	~Application();

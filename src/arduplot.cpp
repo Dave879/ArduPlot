@@ -13,7 +13,7 @@ ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
    /   |  _________/ /_  __/ __ \/ /___  / /_
   / /| | / ___/ __  / / / / /_/ / / __ \/ __/
  / ___ |/ /  / /_/ / /_/ / ____/ / /_/ / /_  
-/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.3a
+/_/  |_/_/   \__,_/\__,_/_/   /_/\____/\__/ v0.4d
                                              
 )";
 
@@ -32,6 +32,7 @@ ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
 void ArduPlot::update()
 {
 	ImGui::DockSpaceOverViewport();
+	//DrawMenuBar();
 	input_stream.DrawDataInputPanel();
 	if (input_stream.IsConnected() && !read_thread_started)
 	{
@@ -65,7 +66,6 @@ void ArduPlot::ReadThread()
 	while (input_stream.IsConnected() && read_thread_started)
 	{
 		ZoneScoped;
-
 		current_data_packet = input_stream.GetData();
 		Mb_s += current_data_packet.size();
 		data_buffer += current_data_packet;
@@ -196,6 +196,38 @@ void ArduPlot::DrawStatWindow()
 	ImGui::End();
 }
 
+void ArduPlot::DrawMenuBar()
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Edit"))
+		{
+			if (ImGui::MenuItem("Undo", "CTRL+Z"))
+			{
+			}
+			if (ImGui::MenuItem("Redo", "CTRL+Y", false, false))
+			{
+			} // Disabled item
+			ImGui::Separator();
+			if (ImGui::MenuItem("Cut", "CTRL+X"))
+			{
+			}
+			if (ImGui::MenuItem("Copy", "CTRL+C"))
+			{
+			}
+			if (ImGui::MenuItem("Paste", "CTRL+V"))
+			{
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::EndMainMenuBar();
+	}
+}
+
 void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 {
 	ZoneScoped;
@@ -309,7 +341,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 							}
 							else
 							{
-								AP_LOG_r("Packet array size doesn't agree with actual array");
+								AP_LOG_r("Packet array size doesn't agree with actual array: expected " << iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey << ", got " << i);
 							}
 							i++;
 						}
@@ -398,10 +430,11 @@ void ArduPlot::DrawPlots()
 
 		if (id_graphs.at(i).is_parent)
 		{
+			ImGui::SetNextWindowSize({1000.0f, 1000.0f}, ImGuiCond_::ImGuiCond_FirstUseEver);
 			ImGui::Begin(id_graphs.at(i).graphName.c_str());
 
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-			ImGui::SliderFloat("", &id_graphs.at(i).history, 1, 100, "History: %.1f s");
+			ImGui::SliderFloat("##", &id_graphs.at(i).history, 1, 100, "History: %.1f s");
 
 			if (ImPlot::BeginPlot(("##" + id_graphs.at(i).graphName).c_str(), ImVec2(-1, -1)))
 			{
@@ -440,6 +473,7 @@ void ArduPlot::DrawPlots()
 
 	for (uint16_t i = 0; i < iid_graphs.size(); i++)
 	{
+		ImGui::SetNextWindowSize({1000.0f, 1000.0f}, ImGuiCond_::ImGuiCond_FirstUseEver);
 		ImGui::Begin(iid_graphs.at(i).graphName.c_str());
 		if (!iid_graphs.at(i).has_set_min_max)
 		{

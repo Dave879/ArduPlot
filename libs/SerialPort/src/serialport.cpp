@@ -68,10 +68,12 @@ int openAndConfigureSerialPort(const char *portPath, int baudRate)
 
     // When the OPOST option is disabled, all other option bits in c_oflag are ignored.
     options.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
-
     // options.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
     //  tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
     //  tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
+
+    options.c_cc[VMIN] = 0; // VTIME becomes the overall time since read() gets called
+    options.c_cc[VTIME] = 10; // Timeout of 1 second
 
     cfsetispeed(&options, get_baud(baudRate));
     cfsetospeed(&options, get_baud(baudRate));

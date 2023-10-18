@@ -34,7 +34,7 @@ std::vector<std::string> EnumSerial::EnumSerialPort()
 
 #else
    for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/")){
-      if (dir.path().string().find("ACM") != std::string::npos || dir.path().string().find("cu.usbmodem") != std::string::npos)
+      if (dir.path().string().find("ACM") != std::string::npos || dir.path().string().find("cu.usbmodem") != std::string::npos || dir.path().string().find("ttyUSB") != std::string::npos)
          paths.push_back(dir.path().string().substr(5));
    }
 #endif

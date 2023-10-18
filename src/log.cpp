@@ -10,12 +10,14 @@
 //  my_log.AddLog("Hello %d world\n", 123);
 //  my_log.Draw("title");
 
-SerialConsole::SerialConsole(std::string console_name): name(console_name){
+SerialConsole::SerialConsole(std::string console_name, unsigned int buffer_size) : name(console_name), buf_size(buffer_size)
+{
 	AutoScroll = true;
 	Clear();
 }
 
-void SerialConsole::Display(){
+void SerialConsole::Display()
+{
 	ZoneScoped;
 	// For the demo: add a debug button _BEFORE_ the normal log window contents
 	// We take advantage of a rarely used feature: multiple calls to Begin()/End() are appending to the _same_ window.
@@ -28,7 +30,8 @@ void SerialConsole::Display(){
 	Draw(name.c_str(), nullptr);
 }
 
-void SerialConsole::Add(const std::string contents){
+void SerialConsole::Add(const std::string contents)
+{
 	if (contents != "" && contents != "\n" && contents != "null")
 		AddLog(contents.c_str());
 }
@@ -61,14 +64,15 @@ void SerialConsole::Draw(const char *title, bool *p_open = NULL)
 		return;
 	}
 
-
 	bool clear = ImGui::Button("Clear");
 	ImGui::SameLine();
 	bool copy = ImGui::Button("Copy");
 	ImGui::SameLine();
-	Filter.Draw("Filter", -150.0f);
+	Filter.Draw("Filter", ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Filter").x - ImGui::GetFrameHeight() - ImGui::GetStyle().FramePadding.y * 4.0f);
 	ImGui::SameLine();
-	ImGui::Checkbox("Auto-scroll", &AutoScroll);
+	ImGui::Checkbox("##", &AutoScroll);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary))
+		ImGui::SetTooltip("Auto-Scroll");
 
 	ImGui::Separator();
 	ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
@@ -97,6 +101,13 @@ void SerialConsole::Draw(const char *title, bool *p_open = NULL)
 	}
 	else
 	{
+		if (buf_size)
+		{
+			const char *line_start = Buf.begin();
+			const char *line_end = Buf.end();
+			ImGui::TextUnformatted(line_start, line_end);
+		}
+
 		// The simplest and easy way to display the entire buffer:
 		//   ImGui::TextUnformatted(buf_begin, buf_end);
 		// And it'll just work. TextUnformatted() has specialization for large blob of text and will fast-forward

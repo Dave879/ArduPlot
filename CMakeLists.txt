@@ -58,6 +58,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	libs/imgui/include
 	libs/implot/
 	libs/json/
+	libs/
 	${tracy_SOURCE_DIR}/public/
 )
 
@@ -73,6 +74,10 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/imgui.ini ${PROJECT_BINARY_DIR}/imgui.ini
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/config.default.ini ${PROJECT_BINARY_DIR}/config.default.ini
 )
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

@@ -1,7 +1,8 @@
 #include "usb_input.h"
 
-USBInput::USBInput()
+USBInput::USBInput(GLFWwindow *w)
 {
+	this->window = w;
 	paths = ScanForAvailableBoards();
 	if (paths.size() > 0)
 		current_item = paths.at(0);
@@ -17,9 +18,10 @@ void USBInput::DrawDataInputPanel()
 {
 	ImGui::Begin("USB input");
 	paths = ScanForAvailableBoards();
-	if (paths.size() == 0)
+	if (std::find(paths.begin(), paths.end(), current_item) == paths.end())
 	{
-		current_item = "";
+		// Device not connected anymore
+		current_item = paths.size() == 0 ? "" : paths.at(0);
 		if (connected_to_device)
 		{
 			closeSerialPort();
@@ -32,7 +34,7 @@ void USBInput::DrawDataInputPanel()
 			connected_to_device = false;
 		}
 	}
-	else
+	else // Device still connected
 	{
 		for (uint8_t i = 0; i < paths.size(); i++)
 		{
@@ -58,7 +60,8 @@ void USBInput::DrawDataInputPanel()
 			}
 		}
 	}
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 117);
+
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (ImGui::CalcTextSize("40000000000").x + ImGui::GetStyle().FramePadding.y * 7.0f) - ImGui::GetFrameHeight());
 	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str()))
 	{
 		for (long unsigned int n = 0; n < paths.size(); n++)
@@ -66,7 +69,13 @@ void USBInput::DrawDataInputPanel()
 			bool is_selected = (current_item == paths.at(n));
 			if (ImGui::Selectable(paths.at(n).c_str(), is_selected))
 			{
+				std::string temp = current_item;
 				current_item = paths.at(n);
+				if (temp != paths.at(n))
+				{
+					closeSerialPort();
+					ConnectRoutine();
+				}
 			}
 			if (is_selected)
 				ImGui::SetItemDefaultFocus();
@@ -77,7 +86,7 @@ void USBInput::DrawDataInputPanel()
 		ImGui::SetTooltip("Device Port");
 
 	ImGui::SameLine();
-	ImGui::SetNextItemWidth(80);
+	ImGui::SetNextItemWidth(ImGui::CalcTextSize("40000000000").x + ImGui::GetStyle().FramePadding.y * 2.0f);
 	if (ImGui::BeginCombo("##baudratecombo", current_baudrate))
 	{
 		for (int n = 0; n < IM_ARRAYSIZE(baudrate_list); n++)
@@ -103,33 +112,16 @@ void USBInput::DrawDataInputPanel()
 		ImGui::SetTooltip("Baudrate");
 
 	ImGui::SameLine();
-	ImGui::SetNextItemWidth(30);
-	ImGui::Checkbox("", &auto_connect);
+	ImGui::SetNextItemWidth(ImGui::GetFrameHeight());
+	ImGui::Checkbox("##", &auto_connect);
 	if (ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary))
 		ImGui::SetTooltip("Auto-reconnect");
 
-	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 	if (ImGui::Button(!connected_to_device ? "Connect" : "Disconnect", ImGui::GetContentRegionAvail()))
 	{
 		if (!connected_to_device)
 		{
-			if (ConnectToUSB(current_item) == 0)
-			{
-				connected_to_device = true;
-				pressed_disconnect = false;
-
-				// Auto-connect logic
-				if (first_time) // To avoid "forcing" auto_connect to true every time "Connect" is pressed without proper settings file save
-				{
-					auto_connect = true;
-					first_time = false;
-				}
-				last_item = current_item;
-			}
-			else
-			{
-				connected_to_device = false;
-			}
+			ConnectRoutine();
 		}
 		else
 		{
@@ -145,6 +137,52 @@ void USBInput::DrawDataInputPanel()
 		}
 	}
 	ImGui::End();
+
+	/**
+	 * USB Output
+	 */
+	// ImGui::SetNextWindowSize({500, 120}, ImGuiCond_::ImGuiCond_FirstUseEver);
+	// ImGui::Begin("USB Output", nullptr, ImGuiWindowFlags_::ImGuiWindowFlags_NoScrollWithMouse);
+	// ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x - ImGui::GetStyle().FramePadding.y * 4.0f);
+	// ImGui::InputText("##Output buffer", output_buf, OUTPUT_BUF_SIZE);
+	// ImGui::SameLine();
+	// if (ImGui::Button("Send") || glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+	// {
+	// 	if (connected_to_device)
+	// 	{
+	// 		if (output_buf == "")
+	// 		{
+	// 			if (write(sfd, output_buf, OUTPUT_BUF_SIZE) > 0) // Successful write
+	// 			{
+	// 				AP_LOG_g("Successful write")
+	// 			}
+	// 		}
+
+	// 		AP_LOG("Pressed key enter")
+	// 	}
+	// }
+	// ImGui::End();
+}
+
+void USBInput::ConnectRoutine()
+{
+	if (ConnectToUSB(current_item) == 0)
+	{
+		connected_to_device = true;
+		pressed_disconnect = false;
+
+		// Auto-connect logic
+		if (first_time) // To avoid "forcing" auto_connect to true every time "Connect" is pressed without proper settings file save
+		{
+			auto_connect = true;
+			first_time = false;
+		}
+		last_item = current_item;
+	}
+	else
+	{
+		connected_to_device = false;
+	}
 }
 
 std::string USBInput::GetData()

@@ -71,7 +71,7 @@ public:
 	uint16_t tps = 0;
 	double startTime;
 	std::chrono::steady_clock::time_point start_time;
-	USBInput input_stream = USBInput();
+	USBInput input_stream = USBInput(this->window);
 
 	uint64_t pkt_idx_ = 0;
 	uint64_t uC_idx = 0;
@@ -101,6 +101,7 @@ public:
 	void UpdateDataStructures(simdjson::dom::object &j);
 	void DrawPlots();
 	void DrawStatWindow();
+	void DrawMenuBar();
 	double seconds_since_start = 0;
 
 	ArduPlot();

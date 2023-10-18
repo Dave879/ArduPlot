@@ -66,11 +66,13 @@ struct iDGraphData
 	}
 };
 
-struct ScatterPlotData{
+struct ScatterPlotData
+{
 	std::string graphName = "";
 	std::vector<ImPlotPoint> data;
 
-	ScatterPlotData(std::string name = "Default"){
+	ScatterPlotData(std::string name = "Default")
+	{
 		this->graphName = name;
 	}
 };
@@ -93,6 +95,31 @@ struct sGraphData
 {
 	std::string graphName = "";
 	ScrollingBuffer buffer;
+};
+
+struct CircularTextBuffer
+{
+	const char *buf;
+	const char *buf_end;
+
+	const char *start;
+	const char *offset;
+
+	CircularTextBuffer(unsigned int buf_size)
+	{
+		buf = (char *)malloc(buf_size);
+		buf_end = buf + (buf_size * sizeof(char));
+		offset = buf;
+		start = buf;
+	}
+
+	void addToBuffer(const char *b, unsigned int size)
+	{
+		if (offset > start && buf_end - offset > size)
+		{
+			memcpy((void*)offset, b, size);
+		}
+	}
 };
 
 int32_t FindInVec(const std::vector<std::string> &vec, const std::string &s);

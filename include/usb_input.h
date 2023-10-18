@@ -3,8 +3,15 @@
 #include <enumserial.h>
 #include <serialport.h>
 #include <sys/ioctl.h>
+#include <algorithm>
 #include <stdio.h>
 #include <atomic>
+
+/**
+ * Needed to include GLFW
+*/
+#include <application.h>
+
 
 #include <chrono>
 #include <thread>
@@ -12,6 +19,7 @@
 #include "utilities.h"
 
 #define CHAR_BUF_SIZE 1000000
+#define OUTPUT_BUF_SIZE 300
 
 class USBInput
 {
@@ -22,6 +30,13 @@ private:
 	const char *baudrate_list[24] = {"110", "300", "600", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "230400", "460800", "500000", "576000", "921600", "1000000", "1152000", "1500000", "2000000", "2500000", "3000000", "3500000", "4000000"};
 	#endif
 	const char *current_baudrate = "115200";
+
+	/**
+	 * Used for listening to keypress events
+	*/
+	GLFWwindow *window;
+
+	char output_buf[OUTPUT_BUF_SIZE] = {0};
 
 	bool auto_connect = false;
 
@@ -35,9 +50,10 @@ private:
 	bool pressed_disconnect = false;
 	std::atomic<bool> connected_to_device = false;
 	int sfd = 0;
+	void ConnectRoutine();
 
 public:
-	USBInput();
+	USBInput(GLFWwindow *window);
 	~USBInput();
 	void DrawDataInputPanel();
 	uint32_t Read(int fd, char *buf);
