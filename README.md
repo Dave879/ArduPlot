@@ -2,7 +2,9 @@
 
 A real-time serial plotter that automatically adjusts itself to your use case.
 
-![ArduPlot v0.2a](img/ArduPlot%20v0.2a_1.png)
+<p>
+  <img src="img/ArduPlot%20v0.2a_1.png" alt="ArduPlot v0.2a">
+</p>
 
 ArduPlot acts both as a traditional serial monitor and a real-time data visualization tool.
 
@@ -100,7 +102,10 @@ There is an additional script which is a shorthand of running `./scripts/build.s
 
 > **_NOTE:_** The [-j flag](https://cmake.org/cmake/help/latest/manual/cmake.1.html#build-a-project) can be appended to the `./scripts/build.sh` and `./scripts/buildandrun.sh` commands to speed up compilation
 
+<p>
+  <img src="img/ArduPlot%20v0.3a_1.png" alt="ArduPlot v0.3a">
+</p>
 
-![ArduPlot v0.3a](img/ArduPlot%20v0.3a_1.png)
-
-![ArduPlot v0.1a](img/ArduPlot%20v0.1a_1.png)
+<p>
+  <img src="img/ArduPlot%20v0.1a_1.png" alt="ArduPlot v0.1a">
+</p>
