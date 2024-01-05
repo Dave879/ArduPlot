@@ -66,15 +66,13 @@ public:
 
 	std::vector<std::string> paths;
 	SerialConsole serial_console = SerialConsole("Serial Console");
-	SerialConsole json_console = SerialConsole("Json Console");
+	FixedBufferSerialConsole json_console = FixedBufferSerialConsole("Json Console");
 	uint16_t counter = 0;
 	uint16_t tps = 0;
 	double startTime;
 	std::chrono::steady_clock::time_point start_time;
 	USBInput input_stream = USBInput(this->window);
 
-	uint64_t pkt_idx_ = 0;
-	uint64_t uC_idx = 0;
 	uint64_t packets_lost = 0;
 
 	uint64_t count = 0;

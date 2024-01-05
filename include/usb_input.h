@@ -18,7 +18,7 @@
 
 #include "utilities.h"
 
-#define CHAR_BUF_SIZE 1000000
+#define CHAR_BUF_SIZE 4096
 #define OUTPUT_BUF_SIZE 300
 
 class USBInput

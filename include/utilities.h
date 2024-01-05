@@ -4,6 +4,11 @@
 #include <string>
 #include <imgui.h>
 #include <implot.h>
+#include <memory>
+#include <cstring>
+#include <iostream>
+
+#define COLORS_IN_TERMINAL true
 
 // #define AP_LOG(x) std::cout <<  __FILE__  << "(" << __LINE__ << ") " << x << std::endl;
 
@@ -13,9 +18,20 @@ const std::string blue("\033[0;34m");
 const std::string reset("\033[0m");
 
 #define AP_LOG(x) std::cout << x << std::endl;
+
+#if COLORS_IN_TERMINAL == true
+
 #define AP_LOG_r(x) std::cout << red << x << reset << std::endl;
 #define AP_LOG_g(x) std::cout << green << x << reset << std::endl;
 #define AP_LOG_b(x) std::cout << blue << x << reset << std::endl;
+
+#else
+
+#define AP_LOG_r(x) AP_LOG(x);
+#define AP_LOG_g(x) AP_LOG(x);
+#define AP_LOG_b(x) AP_LOG(x);
+
+#endif
 
 #define LOGERR(x) AP_LOG_r(x)
 
@@ -97,28 +113,67 @@ struct sGraphData
 	ScrollingBuffer buffer;
 };
 
-struct CircularTextBuffer
+class CircularTextBuffer
 {
-	const char *buf;
-	const char *buf_end;
+private:
+	char *buffer;
+	char *end;
+	int mem_capacity; // Fixed size of the buffer itself
+	int size;			// Size of data inside buffer
 
-	const char *start;
-	const char *offset;
-
-	CircularTextBuffer(unsigned int buf_size)
+public:
+	CircularTextBuffer()
 	{
-		buf = (char *)malloc(buf_size);
-		buf_end = buf + (buf_size * sizeof(char));
-		offset = buf;
-		start = buf;
 	}
 
-	void addToBuffer(const char *b, unsigned int size)
+	CircularTextBuffer(int capacity) : mem_capacity(capacity)
 	{
-		if (offset > start && buf_end - offset > size)
+		buffer = new char[capacity + 1]; // +1 for the null terminator
+		clear();
+	}
+
+	void append(const char *new_text)
+	{
+		int new_text_len = strlen(new_text);
+		// Truncates beginning part of new_text if it
+		// is too big to fit in the circular text buffer
+		if (new_text_len > mem_capacity)
 		{
-			memcpy((void*)offset, b, size);
+			new_text += (new_text_len - mem_capacity);
+			new_text_len = mem_capacity;
 		}
+
+		// If text too long for the memory area allocated for the buffer
+		// reduce old buffer to fit and place it at the beginning
+		if (new_text_len > (mem_capacity - size))
+		{
+			// Remaining size of old buffer, cut off partially
+			int remaining_size = mem_capacity - new_text_len;
+			// Copy part of the old buffer at the beginning of the memory region
+			memcpy(buffer, buffer + new_text_len, remaining_size);
+
+			size = remaining_size;
+			end = buffer + size;
+		}
+
+		// Appends new text to buffer
+		memcpy(end, new_text, new_text_len);
+		size += new_text_len;
+		end += new_text_len;
+
+		*end = '\0';
+	}
+
+	const char *getText() const
+	{
+		return buffer;
+	}
+
+	void clear()
+	{
+		end = buffer;
+		size = 0;
+		buffer[0] = '\0';
 	}
 };
 

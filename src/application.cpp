@@ -101,6 +101,8 @@ void Application::InitImGui()
 
 	ImGuiIO &io = ImGui::GetIO();
 
+	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+
 	ImFontConfig font_cfg;
 	font_cfg.PixelSnapH = true;
 	font_cfg.OversampleH = 1;

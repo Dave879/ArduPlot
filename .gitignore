@@ -3,3 +3,4 @@
 .vscode/
 mahi.log
 massif.out.*
+.gdb_history

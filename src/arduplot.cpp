@@ -38,7 +38,7 @@ void ArduPlot::update()
 	{
 		read_thread_started = true;
 		read_thread = std::thread(&ArduPlot::ReadThread, this);
-		AP_LOG("Spawned thread")
+		AP_LOG("Spawned thread");
 	}
 	if (!input_stream.IsConnected() && read_thread_started)
 	{
@@ -90,19 +90,8 @@ void ArduPlot::ReadThread()
 						UpdateDataStructures(obj);
 						mtx.unlock();
 					}
-					pkt_idx_++;
-					if (display_Mbps < 50)
-					{
-						json_console.Add(pkt + "\n");
-					}
-					else
-					{
-						if (!b)
-						{
-							b = true;
-							json_console.Add("Data too fast, disabled json packet output!");
-						}
-					}
+
+					json_console.Add(pkt + "\n");
 				}
 				catch (const std::exception &e)
 				{
@@ -177,19 +166,13 @@ std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 	}
 	return "";
 }
+
 void ArduPlot::DrawStatWindow()
-{
+{	
 	ZoneScoped;
 	ImGui::Begin("Stats");
 	ImGui::Text("Packets dropped: %lu", packets_lost); // On MacOS %lu wants to become %llu
-	if (ImGui::BeginTable("Index", 2))
-	{
-		ImGui::TableNextColumn();
-		ImGui::Text("µC index: %lu", uC_idx); // On MacOS %lu wants to become %llu
-		ImGui::TableNextColumn();
-		ImGui::Text("Internal index: %lu", pkt_idx_); // On MacOS %lu wants to become %llu
-		ImGui::EndTable();
-	}
+
 	ImGui::Text("Throughput: %.3f Mb/s", display_Mbps);
 	ImGui::Text("Cycles: %lu", display_count); // On MacOS %lu wants to become %llu
 
@@ -361,30 +344,6 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				serial_console.Add(contents.c_str());
 			}
 			break;
-			case 'i':
-				uC_idx = value;
-				if (uC_idx < pkt_idx_) // Microcontroller reflashed/rebooted/crashed/power was unplugged
-				{
-					pkt_idx_ = uC_idx;
-					packets_lost = 0;
-				}
-
-				if (abs((int64_t)uC_idx - (int64_t)pkt_idx_) > 1000) // Kind of bad solution
-				{
-					pkt_idx_ = uC_idx;
-					packets_lost = 0;
-					AP_LOG("Greater than 1000, possible uC reset or disconnection")
-				}
-				else if (uC_idx == pkt_idx_)
-				{
-				}
-				else
-				{
-					AP_LOG("Lost packets... Resetting internal index")
-					packets_lost += uC_idx - pkt_idx_;
-					pkt_idx_ = uC_idx;
-				}
-				break;
 			case 'm':
 				uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
 				std::string_view val = value;

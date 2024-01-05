@@ -33,9 +33,16 @@ std::vector<std::string> EnumSerial::EnumSerialPort()
    RegCloseKey(hkey);
 
 #else
-   for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/")){
-      if (dir.path().string().find("ACM") != std::string::npos || dir.path().string().find("cu.usbmodem") != std::string::npos || dir.path().string().find("ttyUSB") != std::string::npos)
+   for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/"))
+   {
+      bool should_save = false;
+      should_save |= dir.path().string().find("ACM") != std::string::npos;
+      should_save |= dir.path().string().find("cu.usbmodem") != std::string::npos;
+      should_save |= dir.path().string().find("ttyUSB") != std::string::npos;
+      if (should_save)
+      {
          paths.push_back(dir.path().string().substr(5));
+      }
    }
 #endif
 

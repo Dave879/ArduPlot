@@ -1,8 +1,9 @@
 #pragma once
 #include <imgui.h>
 #include <string>
-
 #include <tracy/Tracy.hpp>
+
+#include "utilities.h"
 
 //-----------------------------------------------------------------------------
 // [SECTION] Example App: Debug Log / ShowExampleAppLog()
@@ -32,6 +33,28 @@ public:
 	 * @param buffer_size The size of the text buffer, if omitted defaults to unlimited buffer
 	 */
 	SerialConsole(std::string console_name, unsigned int buffer_size = 0);
+	void Display();
+	void Add(const std::string content);
+};
+
+class FixedBufferSerialConsole
+{
+private:
+	unsigned int buf_size;
+	std::string name;
+	CircularTextBuffer Buf;
+	bool AutoScroll; // Keep scrolling if already at the bottom.
+
+	void Clear();
+	void AddLog(const char *b, unsigned int size);
+	void Draw(const char *title, bool *p_open);
+
+public:
+	/**
+	 * @param console_name Name of the console window
+	 * @param buffer_size The size of the text buffer, if omitted defaults to unlimited buffer
+	 */
+	FixedBufferSerialConsole(std::string console_name, int buffer_size = 20000);
 	void Display();
 	void Add(const std::string content);
 };

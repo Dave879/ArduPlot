@@ -142,3 +142,79 @@ void SerialConsole::Draw(const char *title, bool *p_open = NULL)
 	ImGui::EndChild();
 	ImGui::End();
 }
+
+
+
+FixedBufferSerialConsole::FixedBufferSerialConsole(std::string console_name, int buffer_size) : name(console_name), buf_size(buffer_size)
+{
+	Buf = CircularTextBuffer(buffer_size);
+	AutoScroll = true;
+	Clear();
+}
+
+void FixedBufferSerialConsole::Display()
+{
+	ZoneScoped;
+	// For the demo: add a debug button _BEFORE_ the normal log window contents
+	// We take advantage of a rarely used feature: multiple calls to Begin()/End() are appending to the _same_ window.
+	// Most of the contents of the window will be added by the log.Draw() call.
+	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+	ImGui::Begin(name.c_str(), nullptr);
+
+	ImGui::End();
+	// Actually call in the regular Log helper (which will Begin() into the same window as we just did)
+	Draw(name.c_str(), nullptr);
+}
+
+void FixedBufferSerialConsole::Add(const std::string contents)
+{
+	if (contents != "" && contents != "\n" && contents != "null")
+		AddLog(contents.c_str(), contents.size());
+}
+
+void FixedBufferSerialConsole::Clear()
+{
+	Buf.clear();
+}
+
+void FixedBufferSerialConsole::AddLog(const char *b, unsigned int size)
+{
+	Buf.append(b);
+}
+
+void FixedBufferSerialConsole::Draw(const char *title, bool *p_open = NULL)
+{
+	if (!ImGui::Begin(title, p_open))
+	{
+		ImGui::End();
+		return;
+	}
+
+	bool clear = ImGui::Button("Clear");
+	ImGui::SameLine();
+	bool copy = ImGui::Button("Copy");
+	ImGui::SameLine();
+	ImGui::Checkbox("##", &AutoScroll);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary))
+		ImGui::SetTooltip("Auto-Scroll");
+
+	ImGui::Separator();
+	ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+	if (clear)
+		Clear();
+	if (copy)
+		ImGui::LogToClipboard();
+
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+	ImGui::TextUnformatted(Buf.getText(), Buf.getText() + strlen(Buf.getText()));
+	
+	ImGui::PopStyleVar();
+
+	if (AutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+		ImGui::SetScrollHereY(1.0f);
+
+	ImGui::EndChild();
+	ImGui::End();
+}
