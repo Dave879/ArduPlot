@@ -14,7 +14,6 @@ add_executable(${PROJECT_NAME} ${src_files})
 
 add_subdirectory(libs/glfw)
 add_subdirectory(libs/glad)
-add_subdirectory(libs/SerialPort)
 add_subdirectory(libs/json)
 add_subdirectory(libs/imgui)
 add_subdirectory(libs/implot)
@@ -42,7 +41,7 @@ include(FetchContent)
 FetchContent_Declare (
 	tracy
 	GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-	GIT_TAG 897aec5b062664d2485f4f9a213715d2e527e0ca
+	GIT_TAG v0.10
 	GIT_SHALLOW TRUE
 	GIT_PROGRESS TRUE
 )
@@ -54,7 +53,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	include
 	libs/glfw/include
 	libs/glad/include
-	libs/SerialPort/include
 	libs/imgui/include
 	libs/implot/
 	libs/json/
@@ -62,7 +60,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	${tracy_SOURCE_DIR}/public/
 )
 
-target_link_libraries(${PROJECT_NAME} imgui implot glfw glad SerialPort json TracyClient)
+target_link_libraries(${PROJECT_NAME} imgui implot glfw glad json TracyClient)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
 	# If the debug configuration pass the DEBUG define to the compiler 

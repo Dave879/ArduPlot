@@ -17,11 +17,12 @@
 #include "utilities.h"
 #include "application.h"
 #include "log.h"
+#include "input_stream.h"
 
 class ArduPlot : public Application
 {
 
-public:
+private:
 	// Heatmap
 	// 0  1    2         3    4     5     (6) (7)
 	// ID:TYPE:GRAPHTYPE:NAME:SIZEX:SIZEY:MIN:MAX
@@ -64,31 +65,29 @@ public:
 	simdjson::ondemand::document doc;
 	simdjson::ondemand::value val;
 
-	std::vector<std::string> paths;
 	SerialConsole serial_console = SerialConsole("Serial Console");
 	FixedBufferSerialConsole json_console = FixedBufferSerialConsole("Json Console");
-	uint16_t counter = 0;
-	uint16_t tps = 0;
-	double startTime;
+
 	std::chrono::steady_clock::time_point start_time;
-	USBInput input_stream = USBInput(this->window);
+
+	InputStream* input_stream;
 
 	uint64_t packets_lost = 0;
 
+	// Used for performance monitoring of read thread
+	std::chrono::system_clock::time_point measurement_start_time = std::chrono::system_clock::now();
+/**
+ * Count how many read thread cycles have been executed in the last second
+*/
 	uint64_t count = 0;
 	uint64_t display_count = 0;
 
 	double Mb_s = 0;
 	double display_Mbps = 0;
-	uint64_t B_sum = 0;
-	std::chrono::system_clock::time_point measurement_start_time = std::chrono::system_clock::now();
 
 	std::string data_buffer = "";
 	std::string current_data_packet = "";
 
-	void ReadThread();
-
-	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
 
@@ -96,12 +95,16 @@ public:
 
 	std::vector<std::string> msg_box;
 
+	double seconds_since_start = 0;
+
+	void ReadThread();
+	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	void UpdateDataStructures(simdjson::dom::object &j);
 	void DrawPlots();
 	void DrawStatWindow();
 	void DrawMenuBar();
-	double seconds_since_start = 0;
 
+public:
 	ArduPlot();
 	void update();
 	~ArduPlot();

@@ -22,7 +22,8 @@ ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
 	AP_LOG_b("―――――――――――――――――――――――――――――――――――――――――――――――――");
 	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	startTime = ImGui::GetTime();
+
+	input_stream = new USBInput(std::bind(glfwGetKey, window, GLFW_KEY_ENTER));
 	data_buffer = "";
 	current_data_packet = "";
 	start_time = std::chrono::steady_clock::now();
@@ -32,16 +33,18 @@ ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
 void ArduPlot::update()
 {
 	ImGui::DockSpaceOverViewport();
-	//DrawMenuBar();
-	input_stream.DrawDataInputPanel();
-	if (input_stream.IsConnected() && !read_thread_started)
+
+	input_stream->DrawGUI();
+
+	if (input_stream->IsConnected() && !read_thread_started)
 	{
 		read_thread_started = true;
 		read_thread = std::thread(&ArduPlot::ReadThread, this);
 		AP_LOG("Spawned thread");
 	}
-	if (!input_stream.IsConnected() && read_thread_started)
+	if (!input_stream->IsConnected() && read_thread_started)
 	{
+		packets_lost = 0;
 		AP_LOG("Trying to join read thread...");
 		read_thread_started = false;
 		read_thread.join();
@@ -60,13 +63,12 @@ void ArduPlot::update()
 void ArduPlot::ReadThread()
 {
 	measurement_start_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
-	bool b = false;
-	tracy::SetThreadName("Serial Read thread");
+	tracy::SetThreadName("Data Read thread");
 
-	while (input_stream.IsConnected() && read_thread_started)
+	while (input_stream->IsConnected() && read_thread_started)
 	{
 		ZoneScoped;
-		current_data_packet = input_stream.GetData();
+		current_data_packet = input_stream->GetData();
 		Mb_s += current_data_packet.size();
 		data_buffer += current_data_packet;
 
@@ -123,6 +125,7 @@ void ArduPlot::ReadThread()
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 {
+	ZoneScoped;
 	int rogue_packet_finder = data_buffer.find('}'), found_opening = data_buffer.find('{'), found_closing;
 
 	if (found_opening != std::string::npos)
@@ -168,14 +171,13 @@ std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 }
 
 void ArduPlot::DrawStatWindow()
-{	
+{
 	ZoneScoped;
 	ImGui::Begin("Stats");
 	ImGui::Text("Packets dropped: %lu", packets_lost); // On MacOS %lu wants to become %llu
-
 	ImGui::Text("Throughput: %.3f Mb/s", display_Mbps);
 	ImGui::Text("Cycles: %lu", display_count); // On MacOS %lu wants to become %llu
-
+	ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 	ImGui::End();
 }
 
@@ -264,7 +266,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						iDGraphData gd(graphName, GraphType::LINE);
 						if (tkn.at(tkn_idx_::GRAPHTYPE) == "b")
 							gd.type = GraphType::BAR;
-						gd.buffer.AddPoint(seconds_since_start, double(value));
+						gd.buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
 						gd.merge_ID = merge_ID;
 						if (gd.merge_ID == 0)
 							gd.is_parent = true; // The graph is displayed no matter what, can't be a multiline graph
@@ -324,6 +326,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 							}
 							else
 							{
+								packets_lost++;
 								AP_LOG_r("Packet array size doesn't agree with actual array: expected " << iid_graphs.at(graphID).sizex * iid_graphs.at(graphID).sizey << ", got " << i);
 							}
 							i++;
@@ -337,11 +340,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			{
 				std::string_view val = value;
 				std::string contents(val);
-				if (contents.find("\\n") != std::string::npos)
-				{
-					contents.replace(contents.find("\\"), 2, "\n");
-				}
-				serial_console.Add(contents.c_str());
+				// TODO
 			}
 			break;
 			case 'm':
@@ -361,6 +360,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 		}
 		catch (const std::exception &e)
 		{
+			packets_lost++;
 			AP_LOG_r("Exception in UpdateDataStructures:");
 			AP_LOG_r(e.what());
 		}
@@ -415,6 +415,12 @@ void ArduPlot::DrawPlots()
 						{
 							ZoneScoped;
 							TracyMessageL(id_graphs.at(m).graphName.c_str());
+
+							// int start = 0;
+							// int end = id_graphs.at(m).buffer.Data.size() - 1;
+							// // plot it
+							// ImPlot::PlotLineG(id_graphs.at(m).graphName.c_str(), ScrollingBuffer::cbGetPlotPointDownSampleAt, id_graphs.at(m).buffer.Ds, id_graphs.at(m).buffer.DownSampleLTTB(start, end));
+
 							ImPlot::PlotLine(id_graphs.at(m).graphName.c_str(), &id_graphs.at(m).buffer.Data[0].x, &id_graphs.at(m).buffer.Data[0].y, id_graphs.at(m).buffer.Data.size(), ImPlotAxisFlags_None, id_graphs.at(m).buffer.Offset, 2 * sizeof(float));
 						}
 					}
@@ -422,6 +428,12 @@ void ArduPlot::DrawPlots()
 				else if (id_graphs.at(i).merge_ID == 0)
 				{
 					TracyMessageL(id_graphs.at(i).graphName.c_str());
+
+					// int start = 0;
+					// int end = id_graphs.at(i).buffer.Data.size() - 1;
+					// // plot it
+					// ImPlot::PlotLineG(id_graphs.at(i).graphName.c_str(), ScrollingBuffer::cbGetPlotPointDownSampleAt, id_graphs.at(i).buffer.Ds, id_graphs.at(i).buffer.DownSampleLTTB(start, end));
+
 					ImPlot::PlotLine(id_graphs.at(i).graphName.c_str(), &id_graphs.at(i).buffer.Data[0].x, &id_graphs.at(i).buffer.Data[0].y, id_graphs.at(i).buffer.Data.size(), ImPlotAxisFlags_None, id_graphs.at(i).buffer.Offset, 2 * sizeof(float));
 				}
 				ImPlot::EndPlot();

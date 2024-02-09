@@ -1,7 +1,7 @@
 
 #include "application.h"
 
-Application::Application(int width, int height, const std::string &title) : mouseScrollEvent(false), ShouldClose(false), height(height), width(width), title(title)
+Application::Application(int width, int height, const std::string &title) : ShouldClose(false), height(height), width(width), title(title)
 {
 	mINI::INIFile file("config.ini");
 	mINI::INIStructure ini;
@@ -11,10 +11,10 @@ Application::Application(int width, int height, const std::string &title) : mous
 	{
 		setting_scaling = std::stof(ini["settings"]["scaling"]);
 	}
-	catch(const std::exception& e)
+	catch (const std::exception &e)
 	{
 		AP_LOG_r("An error occured while reading the configuration file")
-		setting_scaling = 1;
+			 setting_scaling = 1;
 	}
 
 	InitOpenGL();
@@ -24,16 +24,6 @@ Application::Application(int width, int height, const std::string &title) : mous
 	glDebugMessageCallback(GLDebugCallback, 0);
 #endif
 
-	// glEnable(GL_CULL_FACE);
-	glCullFace(GL_FRONT);
-
-	//    https://stackoverflow.com/questions/7676971/pointing-to-a-function-that-is-a-class-member-glfw-setkeycallback
-	glfwSetWindowUserPointer(window, this);
-	auto func = [](GLFWwindow *window, double xoffset, double yoffset)
-	{
-		static_cast<Application *>(glfwGetWindowUserPointer(window))->OnScroll(xoffset, yoffset);
-	};
-	glfwSetScrollCallback(window, func);
 	InitImGui();
 }
 
@@ -121,7 +111,7 @@ void Application::InitImGui()
 	// io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Enable Multi-Viewport / Platform Windows
 
 	io.FontGlobalScale = 1.0f / xscale;
-   io.DisplayFramebufferScale = ImVec2(xscale,xscale);
+	io.DisplayFramebufferScale = ImVec2(xscale, xscale);
 
 	ImGui::StyleColorsMahiDark4();
 
@@ -135,44 +125,37 @@ void Application::InitImGui()
 	ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
-void Application::OnScroll(double xoffset, double yoffset)
-{
-	mouseScrollEvent = true;
-	mouseScrollOffset.x = xoffset;
-	mouseScrollOffset.y = yoffset;
-}
-
-void Application::GetInput()
-{
-	glfwGetCursorPos(window, &mousePosx, &mousePosy);
-	glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS ? mouseIsPressedLeft = true : mouseIsPressedLeft = false;
-	glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS ? mouseIsPressedRight = true : mouseIsPressedRight = false;
-	glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS ? mouseIsPressedMiddle = true : mouseIsPressedMiddle = false;
-}
-
 void Application::run()
 {
 	while (!ShouldClose)
 	{
-		std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-		GetInput();
+		ZoneScoped;
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 
 		ImGui::NewFrame();
 
-		update();
+		{
+			ZoneScopedN("ArduPlot Render");
+			update();
+		}
 
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		{
+			ZoneScopedN("ImGui Render");
+			ImGui::Render();
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		}
 
-		glfwSwapBuffers(window);
+		{
+			ZoneScopedN("Swap buffers");
+			glfwSwapBuffers(window);
+		}
 		FrameMark;
-		glfwPollEvents();
+		{
+			ZoneScopedN("Poll events");
+			glfwPollEvents();
+		}
 		if ((glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) || glfwWindowShouldClose(window))
 			ShouldClose = true;
-
-		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-		std::this_thread::sleep_for(std::chrono::milliseconds(14) - std::chrono::milliseconds(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()));
 	}
 }

@@ -7,6 +7,8 @@
 #include <memory>
 #include <cstring>
 #include <iostream>
+#include <math.h>
+#include <regex>
 
 #define COLORS_IN_TERMINAL true
 
@@ -43,14 +45,34 @@ const std::string reset("\033[0m");
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now(); \
 	std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << std::endl;
 
+
+template <typename T>
+void printVec(const std::vector<T> &vec)
+{
+	for (size_t i = 0; i < vec.size(); i++)
+	{
+		AP_LOG(i << "->" << vec.at(i));
+	}
+}
+
+void substituteInvisibleChars(char* str);
+std::string substituteInvisibleChars(const std::string& str);
+
 // utility structure for realtime plot
 struct ScrollingBuffer
 {
-	int MaxSize;
+	static const int MaxSize = 100000;
 	int Offset;
 	ImVector<ImVec2> Data;
+	ImPlotPoint *Ds;
+	static const int DownSampleSize = 8192;
 
-	ScrollingBuffer(int max_size = 100000);
+	// LTTB implementation from ozlb: https://github.com/epezent/implot/pull/389
+
+	ScrollingBuffer();
+	inline ImPlotPoint GetDataAt(int offset, int idx);
+	static ImPlotPoint cbGetPlotPointDownSampleAt(int idx, void *data);
+	int DownSampleLTTB(int start, int end);
 	void AddPoint(float x, float y);
 	void Erase();
 };
@@ -80,6 +102,15 @@ struct iDGraphData
 		this->graphName = name;
 		this->type = type;
 	}
+
+	friend std::ostream &operator<<(std::ostream &os, const iDGraphData &data)
+	{
+		os << "merge_ID: " << data.merge_ID << ", ";
+		os << "is_parent: " << std::boolalpha << data.is_parent << ", ";
+		os << "is_child: " << std::boolalpha << data.is_child << ", ";
+		os << "graphName: " << data.graphName << ", ";
+		return os;
+	}
 };
 
 struct ScatterPlotData
@@ -104,6 +135,14 @@ struct iiDGraphData
 	iiDGraphData(std::string name = "Default")
 	{
 		this->graphName = name;
+	}
+
+	friend std::ostream &operator<<(std::ostream &os, const iiDGraphData &data)
+	{
+		os << "graphName: " << data.graphName << ", ";
+		os << "sizex: " << data.sizex << ", ";
+		os << "sizey: " << data.sizey;
+		return os;
 	}
 };
 

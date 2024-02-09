@@ -24,26 +24,15 @@
 class Application
 {
 private:
-	void GetInput();
-	void OnScroll(double xoffset, double yoffset);
 	void InitImGui();
 	void InitOpenGL();
 	float GetDpiScale();
 
-	ImVec2 mouseScrollOffset;
-	double mousePosx;
-	double mousePosy;
 	int width, height;
 	std::string title;
 	float xscale, yscale;
 
 	float setting_scaling;
-
-	bool mouseScrollEvent;
-	bool mouseIsOverViewport;
-	bool mouseIsPressedLeft;
-	bool mouseIsPressedRight;
-	bool mouseIsPressedMiddle;
 
 	bool ShouldClose;
 

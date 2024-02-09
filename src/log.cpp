@@ -30,10 +30,12 @@ void SerialConsole::Display()
 	Draw(name.c_str(), nullptr);
 }
 
-void SerialConsole::Add(const std::string contents)
+void SerialConsole::Add(std::string contents)
 {
-	if (contents != "" && contents != "\n" && contents != "null")
+	if (contents != ""){
+		contents = substituteInvisibleChars(contents);
 		AddLog(contents.c_str());
+	}
 }
 
 void SerialConsole::Clear()
@@ -168,6 +170,7 @@ void FixedBufferSerialConsole::Display()
 
 void FixedBufferSerialConsole::Add(const std::string contents)
 {
+	ZoneScoped;
 	if (contents != "" && contents != "\n" && contents != "null")
 		AddLog(contents.c_str(), contents.size());
 }

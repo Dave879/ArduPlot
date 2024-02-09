@@ -1,8 +1,7 @@
 #include "usb_input.h"
 
-USBInput::USBInput(GLFWwindow *w)
+USBInput::USBInput(std::function<int()> send_callback) : send_command_callback(send_callback)
 {
-	this->window = w;
 	paths = ScanForAvailableBoards();
 	if (paths.size() > 0)
 		current_item = paths.at(0);
@@ -14,9 +13,9 @@ USBInput::~USBInput()
 {
 }
 
-void USBInput::DrawDataInputPanel()
+void USBInput::DrawGUI()
 {
-	ImGui::Begin("USB input");
+	ImGui::Begin("USB Input");
 	paths = ScanForAvailableBoards();
 	if (std::find(paths.begin(), paths.end(), current_item) == paths.end())
 	{
@@ -141,27 +140,52 @@ void USBInput::DrawDataInputPanel()
 	/**
 	 * USB Output
 	 */
-	// ImGui::SetNextWindowSize({500, 120}, ImGuiCond_::ImGuiCond_FirstUseEver);
-	// ImGui::Begin("USB Output", nullptr, ImGuiWindowFlags_::ImGuiWindowFlags_NoScrollWithMouse);
-	// ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x - ImGui::GetStyle().FramePadding.y * 4.0f);
-	// ImGui::InputText("##Output buffer", output_buf, OUTPUT_BUF_SIZE);
-	// ImGui::SameLine();
-	// if (ImGui::Button("Send") || glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
-	// {
-	// 	if (connected_to_device)
-	// 	{
-	// 		if (output_buf == "")
-	// 		{
-	// 			if (write(sfd, output_buf, OUTPUT_BUF_SIZE) > 0) // Successful write
-	// 			{
-	// 				AP_LOG_g("Successful write")
-	// 			}
-	// 		}
+	ImGui::SetNextWindowSize({500, 120}, ImGuiCond_::ImGuiCond_FirstUseEver);
+	ImGui::Begin("USB Output", nullptr, ImGuiWindowFlags_::ImGuiWindowFlags_NoScrollWithMouse);
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x - ImGui::GetStyle().FramePadding.y * 4.0f);
+	ImGui::InputText("##Output buffer", output_buf, OUTPUT_BUF_SIZE);
+	static bool successful = false;
+	// Change the color of the button if something has concluded successfully
+	time_since_start += ImGui::GetIO().DeltaTime;
+	static int counter = 0;
+	if (successful)
+	{
+		ImGui::SetKeyboardFocusHere(-1);
+		if (time > time_since_start)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 1.0f, 0.6f, time - time_since_start));		  // Green color
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 1.0f, 0.6f, time - time_since_start)); // Green color
+			counter = 2;
+		}
+		else
+		{
+			successful = false;
+		}
+	}
 
-	// 		AP_LOG("Pressed key enter")
-	// 	}
-	// }
-	// ImGui::End();
+	ImGui::SameLine();
+	if (ImGui::Button("Send") || send_command_callback())
+	{
+		if (connected_to_device)
+		{
+			if (strlen(output_buf) > 0)
+			{
+				substituteInvisibleChars(output_buf);
+				int res = write(sfd, output_buf, strlen(output_buf));
+				if (res > 0) // Successful write
+				{
+					successful = true;
+					time = time_since_start + 0.2;
+				}
+				output_buf[0] = '\0';
+			}
+		}
+	}
+
+	ImGui::PopStyleColor(counter); // For ImGuiCol_ButtonHovered and ImGuiCol_Button
+	counter = 0;
+
+	ImGui::End();
 }
 
 void USBInput::ConnectRoutine()
@@ -246,8 +270,188 @@ uint8_t USBInput::ConnectToUSB(std::string port)
 	}
 }
 
+int USBInput::openAndConfigureSerialPort(const char *portPath, int baudRate)
+{
+	if (serialPortIsOpen())
+	{
+		close(sfd);
+	}
+
+	sfd = open(portPath, O_RDWR | O_NOCTTY);
+	if (sfd == -1)
+	{
+		return sfd;
+	}
+
+	fcntl(sfd, F_SETFL, 0);
+
+	// Configure i/o baud rate settings
+	struct termios options;
+
+	// Read in existing settings, and handle any error
+	if (tcgetattr(sfd, &options) != 0)
+	{
+		printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+		return 1;
+	}
+
+	options.c_cflag &= ~PARENB;		  // Clear parity bit, disabling parity (most common)
+	options.c_cflag &= ~CSTOPB;		  // Clear stop field, only one stop bit used in communication (most common)
+	options.c_cflag &= ~CSIZE;			  // Clear all bits that set the data size
+	options.c_cflag |= CS8;				  // 8 bits per byte (most common)
+	options.c_cflag &= ~CRTSCTS;		  // Disable RTS/CTS hardware flow control (most common)
+	options.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
+
+	// Disable echo, erasure, interpretation of INTR, QUIT and SUSP, new-line echo
+	options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG | ECHONL);
+
+	options.c_iflag &= ~(IXON | IXOFF | IXANY);													// Turn off s/w flow ctrl
+	options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL); // Disable any special handling of received bytes
+
+	// When the OPOST option is disabled, all other option bits in c_oflag are ignored.
+	options.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
+
+	options.c_cc[VMIN] = 0;	  // VTIME becomes the overall time since read() gets called
+	options.c_cc[VTIME] = 10; // Timeout of 1 second
+
+	cfsetispeed(&options, get_baud(baudRate));
+	cfsetospeed(&options, get_baud(baudRate));
+
+	if (tcsetattr(sfd, TCSANOW, &options) != 0)
+	{
+		printf("Error setting serial port attributes.\n");
+		close(sfd);
+		return -2; // Using negative value; -1 used above for different failure
+	}
+
+	// Read in existing settings, and handle any error
+	if (tcgetattr(sfd, &options) != 0)
+	{
+		printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+		return 1;
+	}
+
+	return sfd;
+}
+
+/**
+ * If baudrate is not valid, returns B115200
+ */
+int USBInput::get_baud(int baud)
+{
+	switch (baud)
+	{
+	case 110:
+		return B110;
+	case 300:
+		return B300;
+	case 600:
+		return B600;
+	case 1200:
+		return B1200;
+	case 2400:
+		return B2400;
+	case 4800:
+		return B4800;
+	case 9600:
+		return B9600;
+	case 19200:
+		return B19200;
+	case 38400:
+		return B38400;
+	case 57600:
+		return B57600;
+	case 115200:
+		return B115200;
+	case 230400:
+		return B230400;
+	case 460800:
+#ifndef __APPLE__
+		return B460800;
+	case 500000:
+		return B500000;
+	case 576000:
+		return B576000;
+	case 921600:
+		return B921600;
+	case 1000000:
+		return B1000000;
+	case 1152000:
+		return B1152000;
+	case 1500000:
+		return B1500000;
+	case 2000000:
+		return B2000000;
+	case 2500000:
+		return B2500000;
+	case 3000000:
+		return B3000000;
+	case 3500000:
+		return B3500000;
+	case 4000000:
+		return B4000000;
+#endif
+	default:
+		return B115200;
+	}
+}
+
+bool USBInput::serialPortIsOpen()
+{
+	return sfd != SFD_UNAVAILABLE;
+}
+
+int USBInput::closeSerialPort()
+{
+	int result = 0;
+	if (serialPortIsOpen())
+	{
+		result = close(sfd);
+		sfd = SFD_UNAVAILABLE;
+	}
+	return result;
+}
+
 std::vector<std::string> USBInput::ScanForAvailableBoards()
 {
-	EnumSerial enumserial;
-	return enumserial.EnumSerialPort(); // Enum device driver of serial port
+	std::vector<std::string> paths;
+#ifdef _WIN_
+	// search com
+
+	if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &hkey))
+	{
+		unsigned long index = 0;
+		long return_value;
+
+		while ((return_value = RegEnumValue(hkey, index, key_valuename, &len_valuename, 0,
+														&key_type, (LPBYTE)key_valuedata, &len_valuedata)) == ERROR_SUCCESS)
+		{
+			if (key_type == REG_SZ)
+			{
+				std::wstring key_valuedata_ws(key_valuedata);
+				std::string key_valuedata_str(key_valuedata_ws.begin(), key_valuedata_ws.end());
+				paths.push_back(key_valuedata_str);
+			}
+			len_valuename = 1000;
+			len_valuedata = 1000;
+			index++;
+		}
+	}
+	// close key
+	RegCloseKey(hkey);
+
+#else
+	for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/"))
+	{
+		bool should_save = false;
+		should_save |= dir.path().string().find("ACM") != std::string::npos;
+		should_save |= dir.path().string().find("cu.usbmodem") != std::string::npos;
+		should_save |= dir.path().string().find("ttyUSB") != std::string::npos;
+		if (should_save)
+		{
+			paths.push_back(dir.path().string().substr(5));
+		}
+	}
+#endif
+	return paths;
 }
