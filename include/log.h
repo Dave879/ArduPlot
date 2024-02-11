@@ -54,7 +54,7 @@ public:
 	 * @param console_name Name of the console window
 	 * @param buffer_size The size of the text buffer, if omitted defaults to unlimited buffer
 	 */
-	FixedBufferSerialConsole(std::string console_name, int buffer_size = 20000);
+	FixedBufferSerialConsole(std::string console_name, int buffer_size = 50000);
 	void Display();
 	void Add(const std::string content);
 };

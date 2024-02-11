@@ -64,15 +64,8 @@ struct ScrollingBuffer
 	static const int MaxSize = 100000;
 	int Offset;
 	ImVector<ImVec2> Data;
-	ImPlotPoint *Ds;
-	static const int DownSampleSize = 8192;
-
-	// LTTB implementation from ozlb: https://github.com/epezent/implot/pull/389
 
 	ScrollingBuffer();
-	inline ImPlotPoint GetDataAt(int offset, int idx);
-	static ImPlotPoint cbGetPlotPointDownSampleAt(int idx, void *data);
-	int DownSampleLTTB(int start, int end);
 	void AddPoint(float x, float y);
 	void Erase();
 };
@@ -128,7 +121,7 @@ struct iiDGraphData
 {
 	std::string graphName = "";
 	std::vector<double> buffer;
-	uint64_t sizex, sizey;
+	int sizex, sizey;
 	float min = 0, max = 0;
 	bool has_set_min_max = false;
 

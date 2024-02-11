@@ -125,6 +125,7 @@ You can read releases logs https://github.com/epezent/implot/releases for more d
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "implot.h"
 #include "implot_internal.h"
+#include <iostream>
 
 #include <stdlib.h>
 
@@ -197,10 +198,15 @@ ImPlotStyle::ImPlotStyle() {
     ImPlot::StyleColorsAuto(this);
 
     Colormap = ImPlotColormap_Deep;
-
     UseLocalTime     = false;
     Use24HourClock   = false;
     UseISO8601       = false;
+
+#ifdef IMPLOT_BACKEND_ENABLED
+    UseGpuAcceleration = true;
+#else
+    UseGpuAcceleration = false;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -424,13 +430,16 @@ void SetImGuiContext(ImGuiContext* ctx) {
 
 ImPlotContext* CreateContext() {
     ImPlotContext* ctx = IM_NEW(ImPlotContext)();
-    Initialize(ctx);
-    if (GImPlot == nullptr)
+    ctx->backendCtx = Backend::CreateContext();
+    if (GImPlot == nullptr){
         SetCurrentContext(ctx);
+    }
+    Initialize(ctx);
     return ctx;
 }
 
 void DestroyContext(ImPlotContext* ctx) {
+    Backend::DestroyContext();
     if (ctx == nullptr)
         ctx = GImPlot;
     if (GImPlot == ctx)
@@ -539,6 +548,7 @@ ImPlotPlot* GetCurrentPlot() {
 void BustPlotCache() {
     ImPlotContext& gp = *GImPlot;
     gp.Plots.Clear();
+    Backend::BustPlotCache();
     gp.Subplots.Clear();
 }
 
@@ -5305,6 +5315,12 @@ void ShowMetricsWindow(bool* p_popen) {
         }
         ImGui::TreePop();
     }
+    #ifdef IMPLOT_BACKEND_ENABLED
+    if (ImGui::TreeNode("Backend")) {
+        ImPlot::Backend::ShowBackendMetrics();
+        ImGui::TreePop();
+    }
+    #endif
     ImGui::End();
 }
 

@@ -25,6 +25,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "implot.h"
 #include "implot_internal.h"
+#include "backends/implot_backend.h"
 
 //-----------------------------------------------------------------------------
 // [SECTION] Macros and Defines
@@ -105,6 +106,22 @@ static IMPLOT_INLINE float  ImInvSqrt(float x) { return 1.0f / sqrtf(x); }
 #define CALL_INSTANTIATE_FOR_NUMERIC_TYPES() _INSTANTIATE_FOR_NUMERIC_TYPES(IMPLOT_NUMERIC_TYPES);
 
 namespace ImPlot {
+
+
+    // Gets ImGuiDataType for T
+template <typename T>
+struct ImGuiDataTypeGetter { static const ImGuiDataType Value; };
+template <> const ImGuiDataType ImGuiDataTypeGetter<float>::Value  = ImGuiDataType_Float;
+template <> const ImGuiDataType ImGuiDataTypeGetter<double>::Value = ImGuiDataType_Double;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImU8>::Value   = ImGuiDataType_U8;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImS8>::Value   = ImGuiDataType_S8;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImU16>::Value  = ImGuiDataType_U16;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImS16>::Value  = ImGuiDataType_S16;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImU32>::Value  = ImGuiDataType_U32;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImS32>::Value  = ImGuiDataType_S32;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImU64>::Value  = ImGuiDataType_U64;
+template <> const ImGuiDataType ImGuiDataTypeGetter<ImS64>::Value  = ImGuiDataType_S64;
+
 
 //-----------------------------------------------------------------------------
 // [SECTION] Utils
@@ -356,6 +373,7 @@ ImVec4 GetLastItemColor() {
 
 void BustItemCache() {
     ImPlotContext& gp = *GImPlot;
+    Backend::BustItemCache();
     for (int p = 0; p < gp.Plots.GetBufSize(); ++p) {
         ImPlotPlot& plot = *gp.Plots.GetByIndex(p);
         plot.Items.Reset();
@@ -2319,6 +2337,19 @@ void RenderHeatmap(ImDrawList& draw_list, const T* values, int rows, int cols, d
     }
     const double yref = reverse_y ? bounds_max.y : bounds_min.y;
     const double ydir = reverse_y ? -1 : 1;
+
+#ifdef IMPLOT_BACKEND_HAS_HEATMAP
+    if (GImPlot->Style.UseGpuAcceleration) {
+        ImVec2 bmin = transformer(bounds_min);
+        ImVec2 bmax = transformer(bounds_max);
+        Backend::RenderHeatmap(
+            gp.CurrentItem->ID, values, ImGuiDataTypeGetter<T>::Value, rows, cols,
+            (float)scale_min, (float)scale_max, bmin, bmax, bounds_min, bounds_max,
+            ImPlotScale_Linear, reverse_y, gp.Style.Colormap, draw_list);
+    }
+    else
+#endif
+    {
     if (col_maj) {
         GetterHeatmapColMaj<T> getter(values, rows, cols, scale_min, scale_max, (bounds_max.x - bounds_min.x) / cols, (bounds_max.y - bounds_min.y) / rows, bounds_min.x, yref, ydir);
         RenderPrimitives1<RendererRectC>(getter);
@@ -2326,6 +2357,7 @@ void RenderHeatmap(ImDrawList& draw_list, const T* values, int rows, int cols, d
     else {
         GetterHeatmapRowMaj<T> getter(values, rows, cols, scale_min, scale_max, (bounds_max.x - bounds_min.x) / cols, (bounds_max.y - bounds_min.y) / rows, bounds_min.x, yref, ydir);
         RenderPrimitives1<RendererRectC>(getter);
+    }
     }
     // labels
     if (fmt != nullptr) {

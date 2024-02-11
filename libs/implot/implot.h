@@ -540,6 +540,7 @@ struct ImPlotStyle {
     bool    UseLocalTime;            // = false,  axis labels will be formatted for your timezone when ImPlotAxisFlag_Time is enabled
     bool    UseISO8601;              // = false,  dates will be formatted according to ISO 8601 where applicable (e.g. YYYY-MM-DD, YYYY-MM, --MM-DD, etc.)
     bool    Use24HourClock;          // = false,  times will be formatted using a 24 hour clock
+    bool    UseGpuAcceleration;      // = true*,  GPU acceleration will be enabled where your backend supports it (*only true if a backend is enabled, false otherwise)
     IMPLOT_API ImPlotStyle();
 };
 

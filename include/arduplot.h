@@ -70,15 +70,15 @@ private:
 
 	std::chrono::steady_clock::time_point start_time;
 
-	InputStream* input_stream;
+	InputStream *input_stream;
 
 	uint64_t packets_lost = 0;
 
 	// Used for performance monitoring of read thread
 	std::chrono::system_clock::time_point measurement_start_time = std::chrono::system_clock::now();
-/**
- * Count how many read thread cycles have been executed in the last second
-*/
+	/**
+	 * Count how many read thread cycles have been executed in the last second
+	 */
 	uint64_t count = 0;
 	uint64_t display_count = 0;
 
@@ -91,7 +91,7 @@ private:
 	std::vector<iDGraphData> id_graphs;
 	std::vector<iiDGraphData> iid_graphs;
 
-   std::vector<ScatterPlotData> scatter_plots;
+	std::vector<ScatterPlotData> scatter_plots;
 
 	std::vector<std::string> msg_box;
 
@@ -100,9 +100,12 @@ private:
 	void ReadThread();
 	std::string GetFirstJsonPacketInBuffer(std::string &data_buffer);
 	void UpdateDataStructures(simdjson::dom::object &j);
+	void CreateHeatmap(std::string &graphName, std::vector<std::string> &tkn, simdjson::dom::element &value);
 	void DrawPlots();
 	void DrawStatWindow();
 	void DrawMenuBar();
+	void DrawDebugWindow();
+	bool ValidateHeatmapPacket(std::vector<std::string> &tkn, simdjson::dom::element &value);
 
 public:
 	ArduPlot();
