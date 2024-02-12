@@ -308,8 +308,8 @@ void RenderHeatmap(int itemID,
 	data.ColormapTexID = Context.ColormapIDs[cmap];
 	data.MinValue = scale_min;
 	data.MaxValue = scale_max;
-	data.AxisLogX = scale == ImPlotScale_Log10 || scale == ImPlotScale_Log10;
-	data.AxisLogY = scale == ImPlotScale_Log10 || scale == ImPlotScale_Log10;
+	data.AxisLogX = scale == ImPlotScale_Log10;
+	data.AxisLogY = scale == ImPlotScale_Log10;
 	data.MinBounds = bounds_min;
 	data.MaxBounds = bounds_max;
 	data.ShaderProgram = (data_type == ImGuiDataType_Float || data_type == ImGuiDataType_Double ? &Context.ShaderFloat : &Context.ShaderInt);

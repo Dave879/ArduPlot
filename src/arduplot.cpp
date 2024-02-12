@@ -36,7 +36,7 @@ void ArduPlot::update()
 
 	input_stream->DrawGUI();
 
-	//DrawDebugWindow();
+	// DrawDebugWindow();
 
 	if (input_stream->IsConnected() && !read_thread_started)
 	{
@@ -220,14 +220,15 @@ void ArduPlot::DrawMenuBar()
 	}
 }
 
-bool ArduPlot::ValidateHeatmapPacket(std::vector<std::string> &tkn, simdjson::dom::element &value){
+bool ArduPlot::ValidateHeatmapPacket(std::vector<std::string> &tkn, simdjson::dom::element &value)
+{
 	int sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX));
 	int sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
 
-	if(value.get_array().size() != sizex * sizey){
+	if (value.get_array().size() != sizex * sizey)
+	{
 		packets_lost++;
-		AP_LOG_r("[" << tkn.at(tkn_idx_::NAME) <<  "]-> Expected array size doesn't agree with actual array: expected " << sizex * sizey << ", got " << value.get_array().size())
-		return false;
+		AP_LOG_r("[" << tkn.at(tkn_idx_::NAME) << "]-> Expected array size doesn't agree with actual array: expected " << sizex * sizey << ", got " << value.get_array().size()) return false;
 	}
 	return true;
 }
@@ -298,7 +299,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				{
 					uint16_t graphID = FindInVec(assoc_name_id_heatmap, tkn.at(tkn_idx_::NAME));
 					if (!packet_valid)
-						continue;			
+						continue;
 
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					if (graphID >= iid_graphs.size())
@@ -365,21 +366,21 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 	}
 }
 
-void ArduPlot::DrawDebugWindow(){
+void ArduPlot::DrawDebugWindow()
+{
 	ImGui::Begin("Debug Window");
 	for (size_t i = 0; i < iid_graphs.size(); i++)
 	{
 		ImGui::TextUnformatted(iid_graphs.at(i).graphName.c_str());
 		ImGui::SameLine();
-		ImGui::Text("w:%i, h:%i, size:%li, tsize:%i", iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).buffer.size(), iid_graphs.at(i).sizex* iid_graphs.at(i).sizey);
+		ImGui::Text("w:%i, h:%i, size:%li, tsize:%i", iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).buffer.size(), iid_graphs.at(i).sizex * iid_graphs.at(i).sizey);
 	}
-	
+
 	ImGui::Separator();
 	for (size_t i = 0; i < id_graphs.size(); i++)
 	{
 		ImGui::TextUnformatted(id_graphs.at(i).graphName.c_str());
 	}
-
 
 	ImGui::End();
 }
@@ -398,10 +399,10 @@ void ArduPlot::CreateHeatmap(std::string &graphName, std::vector<std::string> &t
 		gd.has_set_min_max = true;
 	}
 
-	if(value.get_array().size() != gd.sizex * gd.sizey){
+	if (value.get_array().size() != gd.sizex * gd.sizey)
+	{
 		packets_lost++;
-		AP_LOG_r("[" << gd.graphName <<  "]-> Expected array size doesn't agree with actual array: expected " << gd.sizex * gd.sizey << ", got " << value.get_array().size())
-		return;
+		AP_LOG_r("[" << gd.graphName << "]-> Expected array size doesn't agree with actual array: expected " << gd.sizex * gd.sizey << ", got " << value.get_array().size()) return;
 	}
 
 	for (auto element : value.get_array())
@@ -489,7 +490,7 @@ void ArduPlot::DrawPlots()
 		}
 
 		static bool checked = false;
-		static const char* format;
+		static const char *format;
 
 		if (checked)
 			format = "%0.f";
@@ -502,7 +503,7 @@ void ArduPlot::DrawPlots()
 		if (ImPlot::BeginPlot("##Heatmap1", ImVec2(-1, -1), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText))
 		{
 			ZoneScopedN("Single heatmap plot");
-			ImPlot::SetupAxes(nullptr, nullptr,  ImPlotAxisFlags_NoDecorations,  ImPlotAxisFlags_NoDecorations);
+			ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
 			// printVec(iid_graphs);
 			ImPlot::PlotHeatmap(iid_graphs.at(i).graphName.c_str(), &iid_graphs.at(i).buffer.at(0), iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).min, iid_graphs.at(i).max, format);
 			ImPlot::EndPlot();

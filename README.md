@@ -75,7 +75,7 @@ git clone --recurse-submodules https://github.com/Dave879/ArduPlot.git
 Install the packages `xorg-dev` and `libx11-dev`:
 
 ``` bash
-sudo apt install xorg-dev libx11-dev
+sudo apt install xorg-dev libx11-dev libsystemd-dev
 ```
 
 In the case of a Debian-based distro

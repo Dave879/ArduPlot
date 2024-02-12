@@ -2,7 +2,7 @@
 
 USBInput::USBInput(std::function<int()> send_callback) : send_command_callback(send_callback)
 {
-	paths = ScanForAvailableBoards();
+	ScanForAvailableBoards();
 	if (paths.size() > 0)
 		current_item = paths.at(0);
 	else
@@ -16,16 +16,16 @@ USBInput::~USBInput()
 void USBInput::DrawGUI()
 {
 	ImGui::Begin("USB Input");
-	paths = ScanForAvailableBoards();
+	ScanForAvailableBoards();
 	if (std::find(paths.begin(), paths.end(), current_item) == paths.end())
 	{
 		// Device not connected anymore
 		current_item = paths.size() == 0 ? "" : paths.at(0);
 		if (connected_to_device)
 		{
-			closeSerialPort();
+			CloseSerialPort();
 			AP_LOG_g("Closed USB connection");
-			paths = ScanForAvailableBoards();
+			ScanForAvailableBoards();
 			if (paths.size() > 0)
 				current_item = paths.at(0);
 			else
@@ -63,16 +63,17 @@ void USBInput::DrawGUI()
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (ImGui::CalcTextSize("40000000000").x + ImGui::GetStyle().FramePadding.y * 7.0f) - ImGui::GetFrameHeight());
 	if (ImGui::BeginCombo("##usbdevcombo", current_item.c_str()))
 	{
-		for (long unsigned int n = 0; n < paths.size(); n++)
+		for (int n = 0; n < paths.size(); n++)
 		{
 			bool is_selected = (current_item == paths.at(n));
+
 			if (ImGui::Selectable(paths.at(n).c_str(), is_selected))
 			{
 				std::string temp = current_item;
 				current_item = paths.at(n);
 				if (temp != paths.at(n))
 				{
-					closeSerialPort();
+					CloseSerialPort();
 					ConnectRoutine();
 				}
 			}
@@ -97,7 +98,7 @@ void USBInput::DrawGUI()
 				if (connected_to_device)
 				{
 					AP_LOG_b("--- Baudrate changed, reopening connection automatically ---");
-					closeSerialPort();
+					CloseSerialPort();
 					connected_to_device = false;
 					auto_connect = true;
 				}
@@ -125,10 +126,10 @@ void USBInput::DrawGUI()
 		else
 		{
 			pressed_disconnect = true;
-			closeSerialPort();
+			CloseSerialPort();
 			connected_to_device = false;
 			AP_LOG_g("Closed USB connection");
-			paths = ScanForAvailableBoards();
+			ScanForAvailableBoards();
 			if (paths.size() > 0)
 				current_item = paths.at(0);
 			else
@@ -213,15 +214,15 @@ std::string USBInput::GetData()
 {
 	if (connected_to_device)
 	{
-		uint32_t len = Read(sfd, data);
-		return std::string(data, data + len);
+		uint32_t len = Read(sfd, input_buf);
+		return std::string(input_buf, input_buf + len);
 	}
 	return "";
 }
 
 uint32_t USBInput::Read(int fd, char *buf)
 {
-	int32_t n = read(fd, buf, CHAR_BUF_SIZE);
+	int32_t n = read(fd, buf, INPUT_BUF_SIZE);
 	if (n == -1)
 	{
 		return 0; // couldn't read
@@ -238,23 +239,22 @@ bool USBInput::IsConnected()
 /**
  * @returns 0 on successful connection, 1 if an error occured
  */
-uint8_t USBInput::ConnectToUSB(std::string port)
+uint8_t USBInput::ConnectToUSB(const std::string &port)
 {
-	std::string s = "/dev/" + port;
-	if (s != "/dev/")
+	if (port != "/dev/")
 	{
 		try
 		{
-			AP_LOG_g("Connecting to " << s << " with baudrate " << std::stoi(current_baudrate) << "...");
-			sfd = openAndConfigureSerialPort(s.c_str(), std::stoi(current_baudrate));
+			AP_LOG_g("Connecting to " << port << " with baudrate " << std::stoi(current_baudrate) << "...");
+			sfd = OpenAndConfigureSerialPort(split(port, ' ').at(0).c_str(), std::stoi(current_baudrate));
 			if (sfd > 0)
 			{
-				AP_LOG_g("Successfully connected to " << s << " Serial file descriptor: " << sfd);
+				AP_LOG_g("Successfully connected to " << port << " Serial file descriptor: " << sfd);
 				return 0;
 			}
 			else
 			{
-				AP_LOG_r("There was an error connecting to " << s);
+				AP_LOG_r("There was an error connecting to " << port);
 				return 1;
 			}
 		}
@@ -270,13 +270,9 @@ uint8_t USBInput::ConnectToUSB(std::string port)
 	}
 }
 
-int USBInput::openAndConfigureSerialPort(const char *portPath, int baudRate)
+int USBInput::OpenAndConfigureSerialPort(const char *portPath, int baudRate)
 {
-	if (serialPortIsOpen())
-	{
-		close(sfd);
-	}
-
+	CloseSerialPort();
 	sfd = open(portPath, O_RDWR | O_NOCTTY);
 	if (sfd == -1)
 	{
@@ -314,8 +310,8 @@ int USBInput::openAndConfigureSerialPort(const char *portPath, int baudRate)
 	options.c_cc[VMIN] = 0;	  // VTIME becomes the overall time since read() gets called
 	options.c_cc[VTIME] = 10; // Timeout of 1 second
 
-	cfsetispeed(&options, get_baud(baudRate));
-	cfsetospeed(&options, get_baud(baudRate));
+	cfsetispeed(&options, GetBaud(baudRate));
+	cfsetospeed(&options, GetBaud(baudRate));
 
 	if (tcsetattr(sfd, TCSANOW, &options) != 0)
 	{
@@ -334,10 +330,96 @@ int USBInput::openAndConfigureSerialPort(const char *portPath, int baudRate)
 	return sfd;
 }
 
+bool USBInput::SerialPortIsOpen()
+{
+	return sfd != SFD_UNAVAILABLE;
+}
+
+int USBInput::CloseSerialPort()
+{
+	int result = 0;
+	if (SerialPortIsOpen())
+	{
+		result = close(sfd);
+		sfd = SFD_UNAVAILABLE;
+	}
+	return result;
+}
+
+void USBInput::ScanForAvailableBoards()
+{
+	if (rescan_time > std::chrono::system_clock::now())
+		return;
+
+	paths.clear();
+	rescan_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+
+#ifdef _WIN_
+	// search com
+
+	if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &hkey))
+	{
+		unsigned long index = 0;
+		long return_value;
+
+		while ((return_value = RegEnumValue(hkey, index, key_valuename, &len_valuename, 0,
+														&key_type, (LPBYTE)key_valuedata, &len_valuedata)) == ERROR_SUCCESS)
+		{
+			if (key_type == REG_SZ)
+			{
+				std::wstring key_valuedata_ws(key_valuedata);
+				std::string key_valuedata_str(key_valuedata_ws.begin(), key_valuedata_ws.end());
+				paths.push_back(key_valuedata_str);
+			}
+			len_valuename = 1000;
+			len_valuedata = 1000;
+			index++;
+		}
+	}
+	// close key
+	RegCloseKey(hkey);
+#endif
+
+	for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/"))
+	{
+		bool should_save = false;
+		should_save |= dir.path().string().find("ACM") != std::string::npos;
+		should_save |= dir.path().string().find("cu.usbmodem") != std::string::npos;
+		should_save |= dir.path().string().find("ttyUSB") != std::string::npos;
+
+		if (should_save)
+		{
+			std::string cmp;
+#ifdef __linux__
+			const char *r1, *r2;
+			sd_device *dev = nullptr;
+			std::string path = "/sys/class/tty/" + dir.path().string().substr(5);
+			std::string tmp = "";
+			int status = sd_device_new_from_syspath(&dev, path.c_str());
+			if (status != 0)
+				continue;
+
+			status = sd_device_get_property_value(dev, "ID_VENDOR", &r1);
+			if (status != 0)
+				continue;
+
+			status = sd_device_get_property_value(dev, "ID_MODEL", &r2);
+			if (status != 0)
+				continue;
+			cmp = dir.path().string() + " " + std::string(r1) + " " + std::string(r2);
+#else
+			cmp = dir.path().string();
+#endif
+
+			paths.push_back(cmp);
+		}
+	}
+}
+
 /**
  * If baudrate is not valid, returns B115200
  */
-int USBInput::get_baud(int baud)
+int USBInput::GetBaud(int baud)
 {
 	switch (baud)
 	{
@@ -394,64 +476,4 @@ int USBInput::get_baud(int baud)
 	default:
 		return B115200;
 	}
-}
-
-bool USBInput::serialPortIsOpen()
-{
-	return sfd != SFD_UNAVAILABLE;
-}
-
-int USBInput::closeSerialPort()
-{
-	int result = 0;
-	if (serialPortIsOpen())
-	{
-		result = close(sfd);
-		sfd = SFD_UNAVAILABLE;
-	}
-	return result;
-}
-
-std::vector<std::string> USBInput::ScanForAvailableBoards()
-{
-	std::vector<std::string> paths;
-#ifdef _WIN_
-	// search com
-
-	if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &hkey))
-	{
-		unsigned long index = 0;
-		long return_value;
-
-		while ((return_value = RegEnumValue(hkey, index, key_valuename, &len_valuename, 0,
-														&key_type, (LPBYTE)key_valuedata, &len_valuedata)) == ERROR_SUCCESS)
-		{
-			if (key_type == REG_SZ)
-			{
-				std::wstring key_valuedata_ws(key_valuedata);
-				std::string key_valuedata_str(key_valuedata_ws.begin(), key_valuedata_ws.end());
-				paths.push_back(key_valuedata_str);
-			}
-			len_valuename = 1000;
-			len_valuedata = 1000;
-			index++;
-		}
-	}
-	// close key
-	RegCloseKey(hkey);
-
-#else
-	for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/"))
-	{
-		bool should_save = false;
-		should_save |= dir.path().string().find("ACM") != std::string::npos;
-		should_save |= dir.path().string().find("cu.usbmodem") != std::string::npos;
-		should_save |= dir.path().string().find("ttyUSB") != std::string::npos;
-		if (should_save)
-		{
-			paths.push_back(dir.path().string().substr(5));
-		}
-	}
-#endif
-	return paths;
 }

@@ -17,10 +17,15 @@
 #include <unistd.h> //write(), read(), close()
 #endif
 
+#ifdef __linux__
+#include <systemd/sd-device.h>
+#endif
+
 #include "utilities.h"
+#include "string_utils.h"
 #include "input_stream.h"
 
-#define CHAR_BUF_SIZE 4096 // Size of linux serial buffer
+#define INPUT_BUF_SIZE 4096 // Size of linux serial buffer
 
 #define OUTPUT_BUF_SIZE 2048 // Arbitrary value
 
@@ -43,26 +48,28 @@ private:
 	bool auto_connect = false;
 	bool first_time = true;
 
-	char data[CHAR_BUF_SIZE] = {0};
+	char input_buf[INPUT_BUF_SIZE] = {0};
 	int length;
 	std::vector<std::string> paths;
 	std::string current_item = "";
 	std::string last_item = "";
 	bool pressed_disconnect = false;
 	std::atomic<bool> connected_to_device = false;
+
 	void ConnectRoutine();
 	uint32_t Read(int fd, char *buf);
-	uint8_t ConnectToUSB(std::string port);
+	uint8_t ConnectToUSB(const std::string &port);
 
-	static std::vector<std::string> ScanForAvailableBoards();
+	std::chrono::system_clock::time_point rescan_time = std::chrono::system_clock::now();
+	void ScanForAvailableBoards();
 
-	int openAndConfigureSerialPort(const char *portPath, int baudRate);
+	int OpenAndConfigureSerialPort(const char *portPath, int baudRate);
 
-	static int get_baud(int baud);
+	static int GetBaud(int baud);
 
-	bool serialPortIsOpen();
+	bool SerialPortIsOpen();
 
-	int closeSerialPort();
+	int CloseSerialPort();
 
 	double time = ImGui::GetIO().DeltaTime;
 	double time_since_start = ImGui::GetIO().DeltaTime;
@@ -70,7 +77,8 @@ private:
 	std::function<int()> send_command_callback;
 
 public:
-	USBInput(std::function<int()> send_callback = [](){ return 0; });
+	USBInput(std::function<int()> send_callback = []()
+				{ return 0; });
 	~USBInput();
 	void DrawGUI() override;
 	std::string GetData() override;
