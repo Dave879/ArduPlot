@@ -4,3 +4,5 @@
 mahi.log
 massif.out.*
 .gdb_history
+CMakeSettings.json
+out/

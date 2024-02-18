@@ -45,7 +45,6 @@ const std::string reset("\033[0m");
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now(); \
 	std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << std::endl;
 
-
 template <typename T>
 void printVec(const std::vector<T> &vec)
 {
@@ -55,8 +54,8 @@ void printVec(const std::vector<T> &vec)
 	}
 }
 
-void substituteInvisibleChars(char* str);
-std::string substituteInvisibleChars(const std::string& str);
+void substituteInvisibleChars(char *str);
+std::string substituteInvisibleChars(const std::string &str);
 
 // utility structure for realtime plot
 struct ScrollingBuffer
@@ -87,7 +86,7 @@ struct iDGraphData
 	std::string graphName = "";
 	GraphType type;
 	ScrollingBuffer buffer;
-	int64_t min = 0, max = 0;
+	double min = 0, max = 0;
 	bool has_set_min_max = false;
 
 	iDGraphData(std::string name = "Default", GraphType type = GraphType::LINE)
@@ -121,7 +120,7 @@ struct iiDGraphData
 {
 	std::string graphName = "";
 	std::vector<double> buffer;
-	int sizex, sizey;
+	unsigned long sizex = 0, sizey = 0;
 	float min = 0, max = 0;
 	bool has_set_min_max = false;
 
@@ -150,12 +149,17 @@ class CircularTextBuffer
 private:
 	char *buffer;
 	char *end;
-	int mem_capacity; // Fixed size of the buffer itself
-	int size;			// Size of data inside buffer
+	size_t mem_capacity; // Fixed size of the buffer itself
+	size_t size = 0;		// Size of data inside buffer
 
 public:
 	CircularTextBuffer()
 	{
+		size = 0;
+		mem_capacity = 1000;
+		buffer = new char[mem_capacity + 1];
+		end = nullptr;
+		clear();
 	}
 
 	CircularTextBuffer(int capacity) : mem_capacity(capacity)
@@ -166,7 +170,7 @@ public:
 
 	void append(const char *new_text)
 	{
-		int new_text_len = strlen(new_text);
+		size_t new_text_len = strlen(new_text);
 		// Truncates beginning part of new_text if it
 		// is too big to fit in the circular text buffer
 		if (new_text_len > mem_capacity)
@@ -180,7 +184,7 @@ public:
 		if (new_text_len > (mem_capacity - size))
 		{
 			// Remaining size of old buffer, cut off partially
-			int remaining_size = mem_capacity - new_text_len;
+			size_t remaining_size = mem_capacity - new_text_len;
 			// Copy part of the old buffer at the beginning of the memory region
 			memcpy(buffer, buffer + new_text_len, remaining_size);
 
@@ -209,4 +213,4 @@ public:
 	}
 };
 
-int32_t FindInVec(const std::vector<std::string> &vec, const std::string &s);
+int FindInVec(const std::vector<std::string> &vec, const std::string &s);

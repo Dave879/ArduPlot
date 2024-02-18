@@ -11,10 +11,10 @@ Application::Application(int width, int height, const std::string &title) : Shou
 	{
 		setting_scaling = std::stof(ini["settings"]["scaling"]);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception)
 	{
-		AP_LOG_r("An error occured while reading the configuration file")
-			 setting_scaling = 1;
+		AP_LOG_r("An error occured while reading the configuration file");
+		setting_scaling = 1;
 	}
 
 	InitOpenGL();
@@ -57,13 +57,23 @@ void Application::InitOpenGL()
 #endif
 
 	GetDpiScale();
-	window = glfwCreateWindow(width * xscale, height * yscale, title.c_str(), NULL, NULL);
+	window = glfwCreateWindow((int)(width * xscale), (int)(height * yscale), title.c_str(), NULL, NULL);
 
 	if (window == NULL)
 	{
 		LOGERR("Failed to initialize window")
 		glfwTerminate();
 	}
+
+	// https://stackoverflow.com/questions/7676971/pointing-to-a-function-that-is-a-class-member-glfw-setkeycallback
+	glfwSetWindowUserPointer(window, this);
+
+	auto FramebufferSizeCallback = [](GLFWwindow *window, int width, int height)
+	{
+		static_cast<Application *>(glfwGetWindowUserPointer(window))->FramebufferSizeCallback(window, width, height);
+	};
+
+	glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 
 	glfwMakeContextCurrent(window);
 
@@ -81,6 +91,44 @@ float Application::GetDpiScale()
 	auto monitor = glfwGetPrimaryMonitor();
 	glfwGetMonitorContentScale(monitor, &xscale, &yscale);
 	return xscale;
+}
+
+void Application::FramebufferSizeCallback(GLFWwindow *window, int width, int height)
+{
+	glViewport(0, 0, width, height);
+	draw();
+}
+
+void Application::draw()
+{
+	ZoneScoped;
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+
+	ImGui::NewFrame();
+
+	{
+		ZoneScopedN("ArduPlot Render");
+		update();
+	}
+
+	{
+		ZoneScopedN("ImGui Render");
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	}
+
+	{
+		ZoneScopedN("Swap buffers");
+		glfwSwapBuffers(window);
+	}
+	FrameMark;
+	{
+		ZoneScopedN("Poll events");
+		glfwPollEvents();
+	}
+	if ((glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) || glfwWindowShouldClose(window))
+		ShouldClose = true;
 }
 
 void Application::InitImGui()
@@ -129,33 +177,6 @@ void Application::run()
 {
 	while (!ShouldClose)
 	{
-		ZoneScoped;
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-
-		ImGui::NewFrame();
-
-		{
-			ZoneScopedN("ArduPlot Render");
-			update();
-		}
-
-		{
-			ZoneScopedN("ImGui Render");
-			ImGui::Render();
-			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-		}
-
-		{
-			ZoneScopedN("Swap buffers");
-			glfwSwapBuffers(window);
-		}
-		FrameMark;
-		{
-			ZoneScopedN("Poll events");
-			glfwPollEvents();
-		}
-		if ((glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) || glfwWindowShouldClose(window))
-			ShouldClose = true;
+		draw();
 	}
 }

@@ -3,7 +3,7 @@
 
 #if __APPLE__
 ArduPlot::ArduPlot() : Application(500, 300, "ArduPlot")
-#elif __linux__
+#elif __linux__ || _WIN32
 ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
 #endif
 {
@@ -17,10 +17,10 @@ ArduPlot::ArduPlot() : Application(1600, 800, "ArduPlot")
                                              
 )";
 
-	AP_LOG_b("―――――――――――――――――――――――――――――――――――――――――――――――――");
+	AP_LOG_b("-------------------------------------------------");
 	AP_LOG_b(name);
-	AP_LOG_b("―――――――――――――――――――――――――――――――――――――――――――――――――");
-	ImGui::GetIO().ConfigFlags &= !ImGuiConfigFlags_ViewportsEnable;
+	AP_LOG_b("-------------------------------------------------");
+	ImGui::GetIO().ConfigFlags &= ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 	input_stream = new USBInput(std::bind(glfwGetKey, window, GLFW_KEY_ENTER));
@@ -44,8 +44,9 @@ void ArduPlot::update()
 		read_thread = std::thread(&ArduPlot::ReadThread, this);
 		AP_LOG("Spawned thread");
 	}
-	if (!input_stream->IsConnected() && read_thread_started)
+	if ((!input_stream->IsConnected() && read_thread_started) || dead_thread)
 	{
+		dead_thread = false;
 		packets_lost = 0;
 		AP_LOG("Trying to join read thread...");
 		read_thread_started = false;
@@ -70,7 +71,11 @@ void ArduPlot::ReadThread()
 	while (input_stream->IsConnected() && read_thread_started)
 	{
 		ZoneScoped;
-		current_data_packet = input_stream->GetData();
+		if (input_stream->GetData(current_data_packet) != InputStatus::kOk)
+		{
+			AP_LOG_r("Error reading");
+			break;
+		}
 		Mb_s += current_data_packet.size();
 		data_buffer += current_data_packet;
 
@@ -87,11 +92,10 @@ void ArduPlot::ReadThread()
 				{
 					padded = pkt;
 					simdjson::error_code error = parser.parse(padded).get(obj);
-
 					if (error == simdjson::error_code::SUCCESS)
 					{
 						mtx.lock();
-						UpdateDataStructures(obj);
+						UpdateDataStructures(obj); // This shouldn't throw an exception so mtx.unlock() will always be called
 						mtx.unlock();
 					}
 					else
@@ -109,7 +113,6 @@ void ArduPlot::ReadThread()
 					AP_LOG_r(e.what());
 				}
 			}
-
 		} while (pkt != "");
 
 		count++;
@@ -122,18 +125,20 @@ void ArduPlot::ReadThread()
 			count = 0;
 		}
 	}
+
 	current_data_packet = "";
 	data_buffer = "";
 	Mb_s = 0;
 	display_Mbps = 0;
 	count = 0;
 	display_count = 0;
+	dead_thread = true;
 }
 
 std::string ArduPlot::GetFirstJsonPacketInBuffer(std::string &data_buffer)
 {
 	ZoneScoped;
-	int rogue_packet_finder = data_buffer.find('}'), found_opening = data_buffer.find('{'), found_closing;
+	size_t rogue_packet_finder = data_buffer.find('}'), found_opening = data_buffer.find('{'), found_closing;
 
 	if (found_opening != std::string::npos)
 	{
@@ -222,8 +227,8 @@ void ArduPlot::DrawMenuBar()
 
 bool ArduPlot::ValidateHeatmapPacket(std::vector<std::string> &tkn, simdjson::dom::element &value)
 {
-	int sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX));
-	int sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
+	size_t sizex = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEX));
+	size_t sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
 
 	if (value.get_array().size() != sizex * sizey)
 	{
@@ -267,18 +272,18 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			case 'n':
 				if (tkn.at(tkn_idx_::GRAPHTYPE) == "l" || tkn.at(tkn_idx_::GRAPHTYPE) == "b") // Update data structure for line or bar graph
 				{
-					uint16_t graphID = FindInVec(assoc_name_id_bar_line, tkn.at(tkn_idx_::NAME));
+					int graphID = FindInVec(assoc_name_id_bar_line, tkn.at(tkn_idx_::NAME));
 					uint16_t merge_ID = std::stoul(tkn.at(tkn_idx_::ID));
 					std::string graphName = tkn.at(tkn_idx_::NAME);
 					try
 					{
 						id_graphs.at(graphID).graphName = graphName; // This needs to stay here in order to throw an exception for the first time, when the graph is still not created in the vector
 
-						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
+						id_graphs.at(graphID).buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, (double)value);
 						if (tkn.size() == 6)
 						{
-							id_graphs.at(graphID).min = std::stoi(tkn.at(line_tkn_idx_::MIN));
-							id_graphs.at(graphID).max = std::stoi(tkn.at(line_tkn_idx_::MAX));
+							id_graphs.at(graphID).min = std::stod(tkn.at(line_tkn_idx_::MIN));
+							id_graphs.at(graphID).max = std::stod(tkn.at(line_tkn_idx_::MAX));
 							id_graphs.at(graphID).has_set_min_max = true;
 						}
 					}
@@ -286,11 +291,16 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 					{
 						iDGraphData gd(graphName, GraphType::LINE);
 						if (tkn.at(tkn_idx_::GRAPHTYPE) == "b")
+						{
 							gd.type = GraphType::BAR;
-						gd.buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, double(value));
+						}
+						gd.buffer.AddPoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_time).count() / 1e9, (double)value);
 						gd.merge_ID = merge_ID;
 						if (gd.merge_ID == 0)
+						{
 							gd.is_parent = true; // The graph is displayed no matter what, can't be a multiline graph
+						}
+
 						id_graphs.push_back(gd);
 						AP_LOG_b("Created new graph: " << id_graphs.at(graphID).graphName)
 					}
@@ -298,6 +308,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 				else if (tkn.at(tkn_idx_::GRAPHTYPE) == "h") // Update data structure for heatmap
 				{
 					uint16_t graphID = FindInVec(assoc_name_id_heatmap, tkn.at(tkn_idx_::NAME));
+
 					if (!packet_valid)
 						continue;
 
@@ -313,8 +324,8 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 						iid_graphs.at(graphID).sizey = std::stoul(tkn.at(heatmap_tkn_idx_::SIZEY));
 						if (tkn.size() == 8)
 						{
-							iid_graphs.at(graphID).min = std::stoi(tkn.at(heatmap_tkn_idx_::MINH));
-							iid_graphs.at(graphID).max = std::stoi(tkn.at(heatmap_tkn_idx_::MAXH));
+							iid_graphs.at(graphID).min = std::stof(tkn.at(heatmap_tkn_idx_::MINH));
+							iid_graphs.at(graphID).max = std::stof(tkn.at(heatmap_tkn_idx_::MAXH));
 							iid_graphs.at(graphID).has_set_min_max = true;
 						}
 						size_t i = 0;
@@ -343,7 +354,7 @@ void ArduPlot::UpdateDataStructures(simdjson::dom::object &j)
 			}
 			break;
 			case 'm':
-				uint16_t graphID = std::stoul(tkn.at(tkn_idx_::ID));
+				uint16_t graphID = std::stoi(tkn.at(tkn_idx_::ID));
 				std::string_view val = value;
 				std::string contents(val);
 				try
@@ -373,7 +384,7 @@ void ArduPlot::DrawDebugWindow()
 	{
 		ImGui::TextUnformatted(iid_graphs.at(i).graphName.c_str());
 		ImGui::SameLine();
-		ImGui::Text("w:%i, h:%i, size:%li, tsize:%i", iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).buffer.size(), iid_graphs.at(i).sizex * iid_graphs.at(i).sizey);
+		ImGui::Text("w:%li, h:%li, size:%li, tsize:%li", iid_graphs.at(i).sizex, iid_graphs.at(i).sizey, iid_graphs.at(i).buffer.size(), iid_graphs.at(i).sizex * iid_graphs.at(i).sizey);
 	}
 
 	ImGui::Separator();

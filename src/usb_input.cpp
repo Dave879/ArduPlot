@@ -20,18 +20,12 @@ void USBInput::DrawGUI()
 	if (std::find(paths.begin(), paths.end(), current_item) == paths.end())
 	{
 		// Device not connected anymore
-		current_item = paths.size() == 0 ? "" : paths.at(0);
 		if (connected_to_device)
 		{
 			CloseSerialPort();
-			AP_LOG_g("Closed USB connection");
 			ScanForAvailableBoards();
-			if (paths.size() > 0)
-				current_item = paths.at(0);
-			else
-				current_item = "";
-			connected_to_device = false;
 		}
+		current_item = paths.size() == 0 ? "" : paths.at(0);
 	}
 	else // Device still connected
 	{
@@ -42,13 +36,9 @@ void USBInput::DrawGUI()
 				current_item = last_item;
 				if (!connected_to_device && !pressed_disconnect && auto_connect)
 				{
-					if (ConnectToUSB(current_item) == 0)
+					if (Connect(current_item) != InputStatus::kOk)
 					{
-						connected_to_device = true;
-					}
-					else
-					{
-						connected_to_device = false;
+						// Do something
 					}
 				}
 				break;
@@ -99,7 +89,6 @@ void USBInput::DrawGUI()
 				{
 					AP_LOG_b("--- Baudrate changed, reopening connection automatically ---");
 					CloseSerialPort();
-					connected_to_device = false;
 					auto_connect = true;
 				}
 			}
@@ -127,8 +116,6 @@ void USBInput::DrawGUI()
 		{
 			pressed_disconnect = true;
 			CloseSerialPort();
-			connected_to_device = false;
-			AP_LOG_g("Closed USB connection");
 			ScanForAvailableBoards();
 			if (paths.size() > 0)
 				current_item = paths.at(0);
@@ -146,7 +133,7 @@ void USBInput::DrawGUI()
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Send").x - ImGui::GetStyle().FramePadding.y * 4.0f);
 	ImGui::InputText("##Output buffer", output_buf, OUTPUT_BUF_SIZE);
 	static bool successful = false;
-	// Change the color of the button if something has concluded successfully
+	// Change the color of the button if the message got sent successfully
 	time_since_start += ImGui::GetIO().DeltaTime;
 	static int counter = 0;
 	if (successful)
@@ -172,8 +159,11 @@ void USBInput::DrawGUI()
 			if (strlen(output_buf) > 0)
 			{
 				substituteInvisibleChars(output_buf);
-				int res = write(sfd, output_buf, strlen(output_buf));
-				if (res > 0) // Successful write
+#ifdef _WIN32
+				if (WriteFile(hSerial, output_buf, strlen(output_buf), nullptr, nullptr))
+#else
+				if (write(sfd, output_buf, strlen(output_buf)) > 0)
+#endif
 				{
 					successful = true;
 					time = time_since_start + 0.2;
@@ -191,9 +181,8 @@ void USBInput::DrawGUI()
 
 void USBInput::ConnectRoutine()
 {
-	if (ConnectToUSB(current_item) == 0)
+	if (Connect(current_item) == InputStatus::kOk)
 	{
-		connected_to_device = true;
 		pressed_disconnect = false;
 
 		// Auto-connect logic
@@ -210,25 +199,31 @@ void USBInput::ConnectRoutine()
 	}
 }
 
-std::string USBInput::GetData()
+InputStatus USBInput::GetData(std::string &data)
 {
 	if (connected_to_device)
 	{
-		uint32_t len = Read(sfd, input_buf);
-		return std::string(input_buf, input_buf + len);
+#ifdef _WIN32
+		DWORD len = 0;
+		if (!ReadFile(hSerial, input_buf, INPUT_BUF_SIZE, &len, nullptr))
+		{
+			CloseSerialPort();
+			data = "";
+			return InputStatus::kIOError;
+		}
+#else
+		int len = read(sfd, input_buf, INPUT_BUF_SIZE);
+		if (len == -1)
+		{
+			data = "";
+			return InputStatus::kIOError;
+		}
+#endif
+		// input_buf[n + 1] = '\0'; // null terminate the string
+		data = std::string(input_buf, input_buf + len);
+		return InputStatus::kOk;
 	}
-	return "";
-}
-
-uint32_t USBInput::Read(int fd, char *buf)
-{
-	int32_t n = read(fd, buf, INPUT_BUF_SIZE);
-	if (n == -1)
-	{
-		return 0; // couldn't read
-	}
-	buf[n + 1] = '\0'; // null terminate the string
-	return n;
+	return InputStatus::kGenericError;
 }
 
 bool USBInput::IsConnected()
@@ -236,47 +231,85 @@ bool USBInput::IsConnected()
 	return connected_to_device;
 }
 
-/**
- * @returns 0 on successful connection, 1 if an error occured
- */
-uint8_t USBInput::ConnectToUSB(const std::string &port)
+InputStatus USBInput::Connect(const std::string &port)
 {
-	if (port != "/dev/")
-	{
-		try
-		{
-			AP_LOG_g("Connecting to " << port << " with baudrate " << std::stoi(current_baudrate) << "...");
-			sfd = OpenAndConfigureSerialPort(split(port, ' ').at(0).c_str(), std::stoi(current_baudrate));
-			if (sfd > 0)
-			{
-				AP_LOG_g("Successfully connected to " << port << " Serial file descriptor: " << sfd);
-				return 0;
-			}
-			else
-			{
-				AP_LOG_r("There was an error connecting to " << port);
-				return 1;
-			}
-		}
-		catch (const std::exception &e)
-		{
-			AP_LOG_r(e.what());
-			return 1;
-		}
-	}
-	else
-	{
-		return 1;
-	}
-}
-
-int USBInput::OpenAndConfigureSerialPort(const char *portPath, int baudRate)
-{
+	const std::string path = split(port, ' ').at(0);
+	AP_LOG_g("Connecting to " << path << " with baudrate " << current_baudrate << "...");
 	CloseSerialPort();
-	sfd = open(portPath, O_RDWR | O_NOCTTY);
+
+#ifdef _WIN32
+	std::string path_used = strchr(path.c_str(), '\\') ? "" : "\\\\.\\" + path;
+	hSerial = CreateFile(path_used.c_str(),
+								GENERIC_READ | GENERIC_WRITE,
+								0,
+								0,
+								OPEN_EXISTING,
+								FILE_ATTRIBUTE_NORMAL,
+								0);
+	if (hSerial == INVALID_HANDLE_VALUE)
+	{
+		if (GetLastError() == ERROR_FILE_NOT_FOUND)
+		{
+			AP_LOG_r("Serial port doesn't exist")
+				 paths.clear();
+			return InputStatus::kIOError;
+			// serial port does not exist. Inform user.
+		}
+		AP_LOG_r("Error occured while connecting") return InputStatus::kIOError;
+		// some other error occurred. Inform user.
+	}
+
+	DCB dcbSerialParams = {0};
+	dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+	if (!GetCommState(hSerial, &dcbSerialParams))
+	{
+		AP_LOG_r("Error getting dcbSerialParams")
+			 // error getting state
+			 return InputStatus::kIOError;
+	}
+
+	// Thanks putty
+	dcbSerialParams.fBinary = true;
+	dcbSerialParams.fDtrControl = DTR_CONTROL_ENABLE;
+	dcbSerialParams.fDsrSensitivity = false;
+	dcbSerialParams.fTXContinueOnXoff = false;
+	dcbSerialParams.fOutX = false;
+	dcbSerialParams.fInX = false;
+	dcbSerialParams.fErrorChar = false;
+	dcbSerialParams.fNull = false;
+	dcbSerialParams.fRtsControl = RTS_CONTROL_ENABLE;
+	dcbSerialParams.fAbortOnError = false;
+	dcbSerialParams.fOutxCtsFlow = false;
+	dcbSerialParams.fOutxDsrFlow = false;
+
+	dcbSerialParams.BaudRate = GetBaud(std::stoi(current_baudrate));
+	dcbSerialParams.ByteSize = 8;
+	dcbSerialParams.StopBits = ONESTOPBIT;
+	dcbSerialParams.Parity = NOPARITY;
+	if (!SetCommState(hSerial, &dcbSerialParams))
+	{
+		AP_LOG_r("Error setting dcbSerialParams")
+			 // error setting serial port state
+			 return InputStatus::kIOError;
+	}
+
+	COMMTIMEOUTS timeouts = {0};
+	timeouts.ReadIntervalTimeout = 1;
+	timeouts.ReadTotalTimeoutConstant = 1;
+	timeouts.ReadTotalTimeoutMultiplier = 1;
+	timeouts.WriteTotalTimeoutConstant = 1;
+	timeouts.WriteTotalTimeoutMultiplier = 1;
+	if (!SetCommTimeouts(hSerial, &timeouts))
+	{
+		AP_LOG_r("Error setting commtimeouts")
+			 // error occureed. Inform user
+			 return InputStatus::kIOError;
+	}
+#else
+	sfd = open(path.c_str(), O_RDWR | O_NOCTTY);
 	if (sfd == -1)
 	{
-		return sfd;
+		return InputStatus::kIOError;
 	}
 
 	fcntl(sfd, F_SETFL, 0);
@@ -288,7 +321,7 @@ int USBInput::OpenAndConfigureSerialPort(const char *portPath, int baudRate)
 	if (tcgetattr(sfd, &options) != 0)
 	{
 		printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-		return 1;
+		return InputStatus::kIOError;
 	}
 
 	options.c_cflag &= ~PARENB;		  // Clear parity bit, disabling parity (most common)
@@ -310,40 +343,50 @@ int USBInput::OpenAndConfigureSerialPort(const char *portPath, int baudRate)
 	options.c_cc[VMIN] = 0;	  // VTIME becomes the overall time since read() gets called
 	options.c_cc[VTIME] = 10; // Timeout of 1 second
 
-	cfsetispeed(&options, GetBaud(baudRate));
-	cfsetospeed(&options, GetBaud(baudRate));
+	cfsetispeed(&options, GetBaud(std::stoi(current_baudrate)));
+	cfsetospeed(&options, GetBaud(std::stoi(current_baudrate)));
 
 	if (tcsetattr(sfd, TCSANOW, &options) != 0)
 	{
 		printf("Error setting serial port attributes.\n");
 		close(sfd);
-		return -2; // Using negative value; -1 used above for different failure
+		return InputStatus::kIOError;
 	}
 
 	// Read in existing settings, and handle any error
 	if (tcgetattr(sfd, &options) != 0)
 	{
 		printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-		return 1;
+		return InputStatus::kIOError;
 	}
+#endif
 
-	return sfd;
+	AP_LOG_g("Successfully connected to " << path);
+	connected_to_device = true;
+	return InputStatus::kOk;
 }
 
-bool USBInput::SerialPortIsOpen()
+void USBInput::CloseSerialPort()
 {
-	return sfd != SFD_UNAVAILABLE;
-}
-
-int USBInput::CloseSerialPort()
-{
-	int result = 0;
-	if (SerialPortIsOpen())
+	if (connected_to_device)
 	{
-		result = close(sfd);
+		connected_to_device = false;
+#ifdef _WIN32
+		try
+		{
+			CloseHandle(hSerial);
+		}
+		catch (const std::exception &)
+		{
+			AP_LOG_r("Error closing handle, probably device got disconnected")
+		}
+		hSerial = nullptr;
+#else
+		close(sfd);
 		sfd = SFD_UNAVAILABLE;
+#endif
+		AP_LOG_r("Closed connection")
 	}
-	return result;
 }
 
 void USBInput::ScanForAvailableBoards()
@@ -351,34 +394,31 @@ void USBInput::ScanForAvailableBoards()
 	if (rescan_time > std::chrono::system_clock::now())
 		return;
 
-	paths.clear();
 	rescan_time = std::chrono::system_clock::now() + std::chrono::seconds(1);
+	paths.clear();
 
-#ifdef _WIN_
-	// search com
-
-	if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &hkey))
+#ifdef _WIN32
+	HKEY hSERIALCOMM = nullptr;
+	int ret = RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("HARDWARE\\DEVICEMAP\\SERIALCOMM"), 0, KEY_READ, &hSERIALCOMM);
+	if (ret == ERROR_SUCCESS)
 	{
-		unsigned long index = 0;
-		long return_value;
-
-		while ((return_value = RegEnumValue(hkey, index, key_valuename, &len_valuename, 0,
-														&key_type, (LPBYTE)key_valuedata, &len_valuedata)) == ERROR_SUCCESS)
+		long ris = 0;
+		long index = 0;
+		do
 		{
-			if (key_type == REG_SZ)
+			DWORD keyvaluesize = MAX_KEY_LENGTH;
+			DWORD valuedatasize = MAX_VALUE_LENGTH;
+			ris = RegEnumValue(hSERIALCOMM, index, keyvalue, &keyvaluesize, nullptr, nullptr, valuedata, &valuedatasize);
+			if (ris == ERROR_SUCCESS)
 			{
-				std::wstring key_valuedata_ws(key_valuedata);
-				std::string key_valuedata_str(key_valuedata_ws.begin(), key_valuedata_ws.end());
-				paths.push_back(key_valuedata_str);
+				paths.push_back(std::string(reinterpret_cast<char const *>(valuedata)) + " " + std::string(keyvalue));
 			}
-			len_valuename = 1000;
-			len_valuedata = 1000;
 			index++;
-		}
+		} while (ris != ERROR_NO_MORE_ITEMS);
 	}
-	// close key
-	RegCloseKey(hkey);
-#endif
+
+	RegCloseKey(hSERIALCOMM);
+#else
 
 	for (const std::filesystem::directory_entry &dir : std::filesystem::directory_iterator("/dev/"))
 	{
@@ -390,7 +430,6 @@ void USBInput::ScanForAvailableBoards()
 		if (should_save)
 		{
 			std::string cmp;
-#ifdef __linux__
 			const char *r1, *r2;
 			sd_device *dev = nullptr;
 			std::string path = "/sys/class/tty/" + dir.path().string().substr(5);
@@ -407,20 +446,48 @@ void USBInput::ScanForAvailableBoards()
 			if (status != 0)
 				continue;
 			cmp = dir.path().string() + " " + std::string(r1) + " " + std::string(r2);
-#else
-			cmp = dir.path().string();
-#endif
 
 			paths.push_back(cmp);
 		}
 	}
+#endif
 }
 
 /**
  * If baudrate is not valid, returns B115200
  */
-int USBInput::GetBaud(int baud)
+int USBInput::GetBaud(const unsigned int baud)
 {
+#ifdef _WIN32
+	// This switch case is overkill, could probably just do: return baud; and trust that baud is a valid baudrate
+	switch (baud)
+	{
+	case 110:
+		return CBR_110;
+	case 300:
+		return CBR_300;
+	case 600:
+		return CBR_600;
+	case 1200:
+		return CBR_1200;
+	case 2400:
+		return CBR_2400;
+	case 4800:
+		return CBR_4800;
+	case 9600:
+		return CBR_9600;
+	case 19200:
+		return CBR_19200;
+	case 38400:
+		return CBR_38400;
+	case 57600:
+		return CBR_57600;
+	case 115200:
+		return CBR_115200;
+	default:
+		return CBR_115200;
+	}
+#else
 	switch (baud)
 	{
 	case 110:
@@ -476,4 +543,5 @@ int USBInput::GetBaud(int baud)
 	default:
 		return B115200;
 	}
+#endif
 }

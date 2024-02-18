@@ -60,15 +60,23 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	${tracy_SOURCE_DIR}/public/
 )
 
-target_link_libraries(${PROJECT_NAME} imgui implot glfw glad json TracyClient systemd)
+target_link_libraries(${PROJECT_NAME} imgui implot glfw glad json TracyClient)
+
+if(LINUX)
+	target_link_libraries(${PROJECT_NAME} systemd)
+endif(LINUX)
+
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wpedantic")
+	set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -Wextra -Wpedantic")
+endif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-	# If the debug configuration pass the DEBUG define to the compiler 
+	# If we are using the debug configuration pass DEBUG #define to the compiler 
 	$<$<CONFIG:Debug>:DEBUG>
 )
-
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/imgui.ini ${PROJECT_BINARY_DIR}/imgui.ini

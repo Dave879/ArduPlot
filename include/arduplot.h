@@ -16,7 +16,7 @@
 #include "usb_input.h"
 #include "utilities.h"
 #include "application.h"
-#include "log.h"
+#include "im_console.h"
 #include "input_stream.h"
 
 class ArduPlot : public Application
@@ -55,6 +55,7 @@ private:
 
 	TracyLockable(std::mutex, mtx);
 	bool read_thread_started = false;
+	bool dead_thread = false;
 	std::thread read_thread;
 
 	std::vector<std::string> assoc_name_id_bar_line;

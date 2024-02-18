@@ -27,6 +27,8 @@ private:
 	void InitImGui();
 	void InitOpenGL();
 	float GetDpiScale();
+	void FramebufferSizeCallback(GLFWwindow *window, int width, int height);
+	void draw();
 
 	int width, height;
 	std::string title;
